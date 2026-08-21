@@ -214,6 +214,35 @@ extension MobileHostAuthorizationTests {
         #expect(error.code == "unauthorized")
         #expect(await recorder.count() == 1)
     }
+
+    @Test func testConnectionBoundLocalPairingReplacesStackAuthorization() async {
+        let recorder = MobileHostAuthorizationInvocationRecorder()
+        let request = MobileHostRPCRequest(
+            id: "workspace-list",
+            method: "workspace.list",
+            params: [:],
+            auth: MobileHostRPCAuth(
+                attachToken: "route-bound-capability",
+                stackAccessToken: nil
+            )
+        )
+
+        let authorized = await MobileHostService.connectionAuthorizationError(
+            for: request,
+            authorization: .stackBearer,
+            localPairingAuthorization: { _ in true },
+            stackAuthorization: { _ in
+                await recorder.record()
+                return .failure(MobileHostRPCError(
+                    code: "unauthorized",
+                    message: "Stack should not run"
+                ))
+            }
+        )
+
+        #expect(authorized == nil)
+        #expect(await recorder.count() == 0)
+    }
 }
 
 @MainActor
@@ -474,6 +503,41 @@ extension MobileHostAuthorizationTests {
         #expect(tcpPayload["mac_device_id"] == nil)
         let tcpCapabilities = try #require(tcpPayload["capabilities"] as? [String])
         #expect(!tcpCapabilities.contains(MobileHostService.irohArtifactLaneCapability))
+    }
+
+    @Test func testLocalPairingStatusIdentityRequiresConnectionBoundAuthorization() async {
+        let request = MobileHostRPCRequest(
+            id: "host-status",
+            method: "mobile.host.status",
+            params: [:],
+            auth: MobileHostRPCAuth(
+                attachToken: "route-bound-capability",
+                stackAccessToken: nil
+            )
+        )
+        let local = await MobileHostService.connectionStatusResult(
+            for: request,
+            authorization: .stackBearer,
+            localPairingAuthorization: { _ in true },
+            stackStatus: { _ in .ok(["unexpected": true]) }
+        )
+        guard case let .ok(localPayload as [String: Any]) = local else {
+            return #expect(Bool(false), "Bound local pairing status must return an object")
+        }
+        #expect(localPayload["mac_device_id"] is String)
+
+        let unbound = await MobileHostService.connectionStatusResult(
+            for: request,
+            authorization: .stackBearer,
+            localPairingAuthorization: { _ in false },
+            stackStatus: { _ in
+                .ok(MobileHostService.publicStatusPayload(routes: []))
+            }
+        )
+        guard case let .ok(unboundPayload as [String: Any]) = unbound else {
+            return #expect(Bool(false), "Unbound status must return an object")
+        }
+        #expect(unboundPayload["mac_device_id"] == nil)
     }
 
     @Test func testIrohTerminalLaneInputFramingSurvivesQUICChunkBoundaries() throws {

@@ -7,6 +7,128 @@ import Testing
 
 @MainActor
 extension ReconnectRouteSelectionTests {
+    @Test func durableLocalTailscaleSessionRedialsAfterTransportDies() async throws {
+        let fixture = makeLocalTailscaleRecoveryOwnerFixture()
+        defer { fixture.release() }
+
+        let ticket = try CmxAttachTicket(
+            workspaceID: "",
+            terminalID: nil,
+            macDeviceID: "test-mac",
+            macDisplayName: "Test Mac",
+            macPairingCompatibilityVersion: 1,
+            routes: [try tailscale()],
+            authToken: "v2.local-route-bound-capability",
+            localPairing: true
+        )
+        let pairingURL = try #require(CmxPairingQRCode().encode(
+            ticket,
+            routeDisclosureMode: .localTailscalePairing,
+            pairingURLScheme: CmxPairingURLScheme(rawValue: CmxPairingURLScheme.release)
+        ))
+
+        #expect(await fixture.store.connectPairingURLResult(pairingURL) == .connected)
+        #expect(await fixture.router.waitForCount(of: "mobile.events.subscribe", atLeast: 1))
+        let firstClient = try #require(fixture.store.remoteClient)
+        let firstTransport = try #require(fixture.box.get())
+        let initialAttemptCount = fixture.factory.attemptedKinds().count
+
+        await firstTransport.close()
+
+        #expect(try await pollUntil {
+            guard let replacement = fixture.store.remoteClient else { return false }
+            let subscribeCount = await fixture.router.count(of: "mobile.events.subscribe")
+            return replacement !== firstClient
+                && fixture.store.connectionState == .connected
+                && fixture.store.activeRoute?.kind == .tailscale
+                && subscribeCount >= 2
+        })
+        let attemptedKinds = fixture.factory.attemptedKinds()
+        #expect(attemptedKinds.count > initialAttemptCount)
+        #expect(attemptedKinds.allSatisfy { $0 == .tailscale })
+    }
+
+    @Test func disconnectedLocalTailscaleSessionAllowsManualRecovery() async throws {
+        let fixture = makeLocalTailscaleRecoveryOwnerFixture()
+        defer { fixture.release() }
+
+        let ticket = try CmxAttachTicket(
+            workspaceID: "",
+            terminalID: nil,
+            macDeviceID: "test-mac",
+            macDisplayName: "Test Mac",
+            macPairingCompatibilityVersion: 1,
+            routes: [try tailscale()],
+            authToken: "v2.local-route-bound-capability",
+            localPairing: true
+        )
+        let pairingURL = try #require(CmxPairingQRCode().encode(
+            ticket,
+            routeDisclosureMode: .localTailscalePairing,
+            pairingURLScheme: CmxPairingURLScheme(rawValue: CmxPairingURLScheme.release)
+        ))
+
+        #expect(await fixture.store.connectPairingURLResult(pairingURL) == .connected)
+        #expect(await fixture.router.waitForCount(of: "mobile.events.subscribe", atLeast: 1))
+        let firstClient = try #require(fixture.store.remoteClient)
+        fixture.store.disconnectLiveConnection()
+        #expect(fixture.store.remoteClient == nil)
+        #expect(fixture.store.connectionState == .disconnected)
+
+        fixture.store.retryMobileConnection()
+
+        #expect(try await pollUntil {
+            guard let replacement = fixture.store.remoteClient else { return false }
+            let subscribeCount = await fixture.router.count(of: "mobile.events.subscribe")
+            return replacement !== firstClient
+                && fixture.store.connectionState == .connected
+                && fixture.store.activeRoute?.kind == .tailscale
+                && subscribeCount >= 2
+        })
+        #expect(fixture.factory.attemptedKinds().allSatisfy { $0 == .tailscale })
+    }
+
+    @Test func foregroundResumeRedialsDisconnectedLocalTailscaleSession() async throws {
+        let fixture = makeLocalTailscaleRecoveryOwnerFixture()
+        defer { fixture.release() }
+
+        let ticket = try CmxAttachTicket(
+            workspaceID: "",
+            terminalID: nil,
+            macDeviceID: "test-mac",
+            macDisplayName: "Test Mac",
+            macPairingCompatibilityVersion: 1,
+            routes: [try tailscale()],
+            authToken: "v2.local-route-bound-capability",
+            localPairing: true
+        )
+        let pairingURL = try #require(CmxPairingQRCode().encode(
+            ticket,
+            routeDisclosureMode: .localTailscalePairing,
+            pairingURLScheme: CmxPairingURLScheme(rawValue: CmxPairingURLScheme.release)
+        ))
+
+        #expect(await fixture.store.connectPairingURLResult(pairingURL) == .connected)
+        #expect(await fixture.router.waitForCount(of: "mobile.events.subscribe", atLeast: 1))
+        let firstClient = try #require(fixture.store.remoteClient)
+        fixture.store.suspendForegroundRefresh()
+        fixture.store.connectionState = .disconnected
+        await fixture.store.releaseRemoteClientForReplacement()
+        fixture.store.didFinishStoredMacReconnectAttempt = true
+
+        fixture.store.resumeForegroundRefresh()
+
+        #expect(try await pollUntil {
+            guard let replacement = fixture.store.remoteClient else { return false }
+            let subscribeCount = await fixture.router.count(of: "mobile.events.subscribe")
+            return replacement !== firstClient
+                && fixture.store.connectionState == .connected
+                && fixture.store.activeRoute?.kind == .tailscale
+                && subscribeCount >= 2
+        })
+        #expect(fixture.factory.attemptedKinds().allSatisfy { $0 == .tailscale })
+    }
+
     @Test func establishedIrohSessionRedialsOnceAfterTransportDies() async throws {
         let fixture = try await makeRecoveryOwnerFixture()
         defer { fixture.release() }
@@ -655,6 +777,45 @@ extension ReconnectRouteSelectionTests {
             identityProvider: StaticIdentityProvider(userID: "user-1"),
             reachability: AlwaysOnlineReachability(),
             pairingHintDefaults: UserDefaults(suiteName: "iroh-recovery-owner-\(UUID().uuidString)")!,
+            diagnosticLog: diagnosticLog
+        )
+        return RecoveryOwnerFixture(
+            store: store,
+            clock: clock,
+            router: router,
+            box: box,
+            factory: factory,
+            diagnosticLog: diagnosticLog,
+            directory: directory
+        )
+    }
+
+    private func makeLocalTailscaleRecoveryOwnerFixture() -> RecoveryOwnerFixture {
+        let clock = TestClock()
+        let router = LivenessHostRouter()
+        let box = TransportBox()
+        let factory = SequencedKindTransportFactory(
+            router: router,
+            box: box,
+            heldConnectAttempts: [],
+            firstTransportCloseGate: nil
+        )
+        let diagnosticLog = DiagnosticLog(capacity: 128, role: .mobileClient)
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("local-tailscale-recovery-\(UUID().uuidString)")
+        let store = MobileShellComposite(
+            runtime: LivenessTestRuntime(
+                transportFactory: factory,
+                now: { clock.now },
+                supportedRouteKinds: [.tailscale]
+            ),
+            isSignedIn: true,
+            pairedMacStore: nil,
+            identityProvider: nil,
+            reachability: AlwaysOnlineReachability(),
+            pairingHintDefaults: UserDefaults(
+                suiteName: "local-tailscale-recovery-\(UUID().uuidString)"
+            )!,
             diagnosticLog: diagnosticLog
         )
         return RecoveryOwnerFixture(

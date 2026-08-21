@@ -43,6 +43,23 @@ struct SocketClientCapabilityTests {
         #expect(!issuer.verifies(String(tampered)))
     }
 
+    @Test func explicitBindingCannotBeReplayedInAnotherContext() {
+        let issuer = SocketClientCapabilityAuthority(
+            secret: secret,
+            audience: "com.cmuxterm.test"
+        )
+        let originalBinding = Data("tailscale:100.64.0.5:58465".utf8)
+        let otherBinding = Data("tailscale:100.64.0.6:58465".utf8)
+        let capability = issuer.issueCapability(
+            binding: originalBinding,
+            nonce: nonce
+        )
+
+        #expect(issuer.verifies(capability, binding: originalBinding))
+        #expect(!issuer.verifies(capability, binding: otherBinding))
+        #expect(!issuer.verifies(capability))
+    }
+
     @Test func envelopeRoundTripsWithoutExposingCapabilityToDispatch() throws {
         let issuer = SocketClientCapabilityAuthority(
             secret: secret,

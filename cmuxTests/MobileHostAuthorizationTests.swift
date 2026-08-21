@@ -82,6 +82,54 @@ struct MobileHostAuthorizationTests {
         let result = await MobileHostService.shared.debugAuthorizationError(for: request)
         #expect(result == nil)
     }
+
+    @Test func testLocalCapabilityIsBoundToExactTailscaleRoutes() throws {
+        let authority = MobileLocalPairingAuthority(
+            secret: Data(repeating: 0x5A, count: 32),
+            audience: "com.cmuxterm.local-pairing-test"
+        )
+        let originalRoute = try CmxAttachRoute(
+            id: "tailscale",
+            kind: .tailscale,
+            endpoint: .hostPort(host: "100.64.0.5", port: 58465),
+            priority: 10
+        )
+        let otherRoute = try CmxAttachRoute(
+            id: "tailscale",
+            kind: .tailscale,
+            endpoint: .hostPort(host: "100.64.0.6", port: 58465),
+            priority: 10
+        )
+        let capability = try authority.issueCapability(for: [originalRoute])
+
+        #expect(authority.verifies(capability, for: [originalRoute]))
+        #expect(!authority.verifies(capability, for: [otherRoute]))
+    }
+
+    @Test func testLegacyNetworkAdmissionRequiresExactTailscaleEndpointAndTunnel() throws {
+        let route = try CmxAttachRoute(
+            id: "tailscale",
+            kind: .tailscale,
+            endpoint: .hostPort(host: "100.64.0.5", port: 58465),
+            priority: 10
+        )
+
+        #expect(MobileHostLegacyTailscaleAdmission(
+            localHost: "100.64.0.5",
+            localPort: 58465,
+            interfaceNames: ["utun7"]
+        )?.admittedRoute(in: [route]) == route)
+        #expect(MobileHostLegacyTailscaleAdmission(
+            localHost: "100.64.0.6",
+            localPort: 58465,
+            interfaceNames: ["utun7"]
+        )?.admittedRoute(in: [route]) == nil)
+        #expect(MobileHostLegacyTailscaleAdmission(
+            localHost: "100.64.0.5",
+            localPort: 58465,
+            interfaceNames: ["en0"]
+        ) == nil)
+    }
     #if DEBUG
     @Test func testDebugStackAuthTokenPolicyRequiresConfiguredToken() {
         #expect(MobileHostDevStackAuthPolicy.normalizedToken("   ") == nil)

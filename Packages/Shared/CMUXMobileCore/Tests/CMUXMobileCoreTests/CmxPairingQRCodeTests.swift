@@ -78,6 +78,26 @@ import Testing
         #expect(decoded.expiresAt == nil)
     }
 
+    @Test func localGrammarRejectsOrdinaryAttachToken() throws {
+        let ticket = try CmxAttachTicket(
+            workspaceID: "",
+            terminalID: nil,
+            macDeviceID: "123e4567-e89b-42d3-a456-426614174004",
+            macDisplayName: "Account Mac",
+            routes: [try tailscaleRoute(index: 0, host: "100.64.0.5")],
+            authToken: "temporary-attach-token"
+        )
+
+        #expect(!CmxPairingQRCode().canEncode(
+            ticket,
+            routeDisclosureMode: .localTailscalePairing
+        ))
+        #expect(CmxPairingQRCode().encode(
+            ticket,
+            routeDisclosureMode: .localTailscalePairing
+        ) == nil)
+    }
+
     @Test func roundTripsSingleRoute() throws {
         let ticket = try pairingTicket(routes: [
             try tailscaleRoute(index: 0, host: "100.64.0.5"),

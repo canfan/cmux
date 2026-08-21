@@ -269,4 +269,32 @@ import Testing
         #expect(decoded.routes.first?.kind == .tailscale)
         #expect(decoded.localPairing)
     }
+
+    @Test func normalizedFullTicketPreservesLocalPairingAuthorityMarker() throws {
+        let ticket = try CmxAttachTicket(
+            workspaceID: "",
+            terminalID: nil,
+            macDeviceID: "mac-device",
+            macDisplayName: nil,
+            macPairingCompatibilityVersion: nil,
+            routes: [
+                try CmxAttachRoute(
+                    id: "tailscale",
+                    kind: .tailscale,
+                    endpoint: .hostPort(host: "100.64.0.5", port: 58465)
+                ),
+            ],
+            authToken: "local-capability",
+            localPairing: true
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let decoded = try CmxAttachTicketInput.decode(
+            attachURL(payload: try encoder.encode(ticket))
+        )
+
+        #expect(decoded.macPairingCompatibilityVersion == 0)
+        #expect(decoded.localPairing)
+        #expect(decoded.authToken == "local-capability")
+    }
 }

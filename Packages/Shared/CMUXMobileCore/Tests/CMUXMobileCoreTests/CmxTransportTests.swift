@@ -119,6 +119,37 @@ private func profile(
     }
 }
 
+@Test func localPairingRequiresDurableCapabilityWithoutExpiry() throws {
+    let route = try CmxAttachRoute(
+        id: "tailscale",
+        kind: .tailscale,
+        endpoint: .hostPort(host: "100.64.1.2", port: 49831)
+    )
+
+    #expect(throws: CmxAttachTicketError.localPairingRequiresAuthToken) {
+        _ = try CmxAttachTicket(
+            workspaceID: "",
+            terminalID: nil,
+            macDeviceID: "mac-1",
+            macDisplayName: nil,
+            routes: [route],
+            localPairing: true
+        )
+    }
+    #expect(throws: CmxAttachTicketError.localPairingCannotExpire) {
+        _ = try CmxAttachTicket(
+            workspaceID: "",
+            terminalID: nil,
+            macDeviceID: "mac-1",
+            macDisplayName: nil,
+            routes: [route],
+            expiresAt: Date(timeIntervalSince1970: 2_000_000_000),
+            authToken: "local-capability",
+            localPairing: true
+        )
+    }
+}
+
 @Test func attachTicketConstructsWithPastExpiryAndReportsExpired() throws {
     // Expiry is data for token consumers, not a structural validity gate: a
     // stale ticket still constructs (a QR scanned long after it was shown must

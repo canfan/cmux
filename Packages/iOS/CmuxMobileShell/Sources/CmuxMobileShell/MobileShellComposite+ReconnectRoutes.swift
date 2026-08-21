@@ -442,7 +442,7 @@ extension MobileShellComposite {
         // transport before the probe decides to replace it, creating two owners
         // for one foreground transition. Preview/legacy clients have no stored
         // route to redial, so retain their same-client resubscribe fallback.
-        if shouldResync, pairedMacStore == nil {
+        if shouldResync, !hasDurableConnectionRecoveryAuthority {
             resyncTerminalOutput(reason: "foreground", restartEventStream: true)
         }
         restartActiveMobileBrowserStreams()
@@ -487,8 +487,7 @@ extension MobileShellComposite {
     /// states where a redial cannot help.
     func recoverDisconnectedOnForegroundIfNeeded() {
         guard connectionState != .connected,
-              isSignedIn,
-              pairedMacStore != nil,
+              localPairingRecoveryTicket != nil || (isSignedIn && pairedMacStore != nil),
               !connectionRequiresReauth,
               !isReconnectingStoredMac,
               didFinishStoredMacReconnectAttempt,

@@ -290,6 +290,13 @@ public final class MobileShellComposite: MobileTerminalOutputSinking {
     /// for Mac/iPhone app-version skew.
     public private(set) var pairingVersionWarning: String?
     public internal(set) var activeTicket: CmxAttachTicket?
+    /// Durable route-bound authority retained across transient transport teardown.
+    ///
+    /// Unlike ``activeTicket``, recovery must not clear this when the live RPC
+    /// client dies. Local Tailscale pairing has no Stack account from which to
+    /// re-mint authority, so every recovery trigger reuses this exact validated
+    /// capability until explicit sign-out or a different successful pairing.
+    var localPairingRecoveryTicket: CmxAttachTicket?
     public internal(set) var activeRoute: CmxAttachRoute? {
         didSet {
             guard oldValue != activeRoute, connectionState == .connected else { return }
@@ -1871,6 +1878,7 @@ public final class MobileShellComposite: MobileTerminalOutputSinking {
         self.connectionErrorGuidance = nil
         self.pairingVersionWarning = nil
         self.activeTicket = nil
+        self.localPairingRecoveryTicket = nil
         self.activeRoute = nil
         self.activeMacInstanceTag = nil
         self.selectedWorkspaceID = workspaces.first?.id
@@ -2129,6 +2137,7 @@ public final class MobileShellComposite: MobileTerminalOutputSinking {
         clearTerminalCreationError()
         clearPairingError()
         activeTicket = nil
+        localPairingRecoveryTicket = nil
         activeRoute = nil
         // Drop the cached paired Macs so the next signed-in user never sees the
         // previous user's hosts in the switcher.
@@ -3028,6 +3037,16 @@ public final class MobileShellComposite: MobileTerminalOutputSinking {
         refreshBackupBeforeDial: Bool,
         generation: Int
     ) async -> StoredMacReconnectOutcome {
+        if let ticket = localPairingRecoveryTicket {
+            let outcome = await connectLocalPairingOutcome(
+                ticket: ticket,
+                ifStillCurrent: { [weak self] in
+                    self?.storedMacReconnectGeneration == generation
+                }
+            )
+            finishStoredMacReconnectAttempt(generation: generation)
+            return outcome
+        }
         // No store / not signed in: can't determine a stored Mac here. Resolve the
         // restoring gate (so a returning user doesn't spin on RestoringSessionView)
         // but leave the persisted hint intact for a future attempt.
@@ -4830,13 +4849,9 @@ public final class MobileShellComposite: MobileTerminalOutputSinking {
         // Camera/deep-link open receives the same exact-route authorization.
         let userTailscalePairingAuthorizations: [CmxUserTailscalePairingAuthorization]
         if userEnteredPairingCode || ticket.localPairing {
-            userTailscalePairingAuthorizations = ticket.routes.compactMap { route in
-                guard route.kind == .tailscale,
-                      case let .hostPort(host, port) = route.endpoint else {
-                    return nil
-                }
-                return try? CmxUserTailscalePairingAuthorization(host: host, port: port)
-            }
+            userTailscalePairingAuthorizations = Self.tailscalePairingAuthorizations(
+                for: ticket
+            )
         } else {
             userTailscalePairingAuthorizations = []
         }
@@ -10147,6 +10162,9 @@ public final class MobileShellComposite: MobileTerminalOutputSinking {
                         replaceRemoteClient(with: client)
                     }
                     activeTicket = candidateTicket
+                    localPairingRecoveryTicket = Self.validatedLocalPairingRecoveryTicket(
+                        candidateTicket
+                    )
                     connectedHostName = candidateHostName
                     let previousForegroundDeviceIDForFeedReset = foregroundMacDeviceID
                     let previousForegroundTagForFeedReset = activeMacInstanceTag
@@ -10436,6 +10454,22 @@ public final class MobileShellComposite: MobileTerminalOutputSinking {
             return nil
         }
         return authorizations.first { $0.authorizes(host: host, port: port) }
+    }
+
+    /// Exact destinations authorized by one user-approved Tailscale ticket.
+    static func tailscalePairingAuthorizations(
+        for ticket: CmxAttachTicket
+    ) -> [CmxUserTailscalePairingAuthorization] {
+        ticket.routes.compactMap { route in
+            guard route.kind == .tailscale,
+                  case let .hostPort(host, port) = route.endpoint else {
+                return nil
+            }
+            return try? CmxUserTailscalePairingAuthorization(
+                host: host,
+                port: port
+            )
+        }
     }
 
     private func attachTicketIsUnexpired(

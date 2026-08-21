@@ -25,6 +25,12 @@ enum StoredMacReconnectOutcome: Equatable, Sendable {
 
 @MainActor
 extension MobileShellComposite {
+    /// Whether the foreground session has durable authority that can mint or
+    /// reuse a replacement transport without asking the user to pair again.
+    var hasDurableConnectionRecoveryAuthority: Bool {
+        localPairingRecoveryTicket != nil || pairedMacStore != nil
+    }
+
     func startObservingNetworkPathChanges() {
         guard !networkPathObservationStarted else { return }
         networkPathObservationStarted = true
@@ -56,7 +62,7 @@ extension MobileShellComposite {
     func recoverForegroundConnectionIfNeeded(resyncAfterHealthy: Bool) {
         guard connectionState == .connected,
               let client = remoteClient,
-              pairedMacStore != nil else { return }
+              hasDurableConnectionRecoveryAuthority else { return }
         guard foregroundRefreshIsActive else {
             pendingInactiveRecoveryTrigger = .foreground
             return
@@ -76,7 +82,7 @@ extension MobileShellComposite {
     /// Otherwise the connection dropped, so reconnect once; on failure the UI
     /// shows Retry and the next network change re-attempts automatically.
     func recoverMobileConnection(trigger: RecoveryTrigger) {
-        guard remoteClient != nil || pairedMacStore != nil else { return }
+        guard remoteClient != nil || hasDurableConnectionRecoveryAuthority else { return }
         // A dial launched while the scene is inactive suspends with the
         // process; park the trigger and replay it once on foreground.
         guard foregroundRefreshIsActive else {
@@ -225,7 +231,7 @@ extension MobileShellComposite {
         resyncAfterHealthy: Bool,
         preclaimedAttempt: MobileConnectionRecoveryOwner.Attempt?
     ) {
-        guard pairedMacStore != nil else {
+        guard hasDurableConnectionRecoveryAuthority else {
             guard connectionState == .connected else { return }
             // Preview/legacy clients can have a live RPC shell without durable
             // pairing state. Liveness and network-path changes can rebuild that
@@ -855,6 +861,58 @@ extension MobileShellComposite {
             clearAutomaticReconnectBackoff(accountID: automaticReconnectAccountID)
         }
         return connected ? .connected : outcome
+    }
+
+    /// Redials one durable account-free ticket through its exact Tailscale routes.
+    func connectLocalPairingOutcome(
+        ticket: CmxAttachTicket,
+        ifStillCurrent: (() -> Bool)? = nil
+    ) async -> StoredMacReconnectOutcome {
+        guard Self.validatedLocalPairingRecoveryTicket(ticket) != nil else {
+            return .failed(.unsupportedRoute)
+        }
+        guard ifStillCurrent?() ?? true else { return .superseded }
+        do {
+            let noThrowFailure = try await connect(
+                ticket: ticket,
+                allowsStackAuthFallback: false,
+                userTailscalePairingAuthorizations:
+                    Self.tailscalePairingAuthorizations(for: ticket),
+                ifStillCurrent: ifStillCurrent
+            )
+            guard ifStillCurrent?() ?? true else { return .superseded }
+            if connectionState == .connected, remoteClient != nil {
+                return .connected
+            }
+            return .failed(
+                noThrowFailure?.diagnosticFailureKind ?? .connectionClosed
+            )
+        } catch {
+            guard ifStillCurrent?() ?? true else { return .superseded }
+            let failure = Self.diagnosticFailureKind(for: error)
+            if !disconnectForAuthorizationFailureIfNeeded(error) {
+                connectionState = .disconnected
+                macConnectionStatus = .unavailable
+                clearRemoteConnectionContext()
+            }
+            return .failed(failure)
+        }
+    }
+
+    /// Accepts only the durable, bearer-backed Tailscale grammar used by local pairing.
+    static func validatedLocalPairingRecoveryTicket(
+        _ ticket: CmxAttachTicket
+    ) -> CmxAttachTicket? {
+        guard ticket.localPairing,
+              ticket.expiresAt == nil,
+              ticket.authToken?.trimmingCharacters(
+                  in: .whitespacesAndNewlines
+              ).isEmpty == false,
+              !ticket.routes.isEmpty,
+              ticket.routes.allSatisfy({ $0.kind == .tailscale }) else {
+            return nil
+        }
+        return ticket
     }
 
     func automaticIrohReconnectIsBlocked(accountID: String) -> Bool {

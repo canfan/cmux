@@ -392,12 +392,11 @@ final class MobileHostService {
     /// cached identity-free payload without touching the main actor or the
     /// Stack verifier — the DoS posture of the public probe is unchanged, and
     /// an arbitrary process that can reach the port receives no private route
-    /// hints or account identity. A request that presents either the approved
-    /// local capability or the owner's same-account Stack token is answered
-    /// with the Mac's identity, which a freshly paired phone needs to key its
-    /// paired-Mac record. A token that fails verification degrades to the
-    /// identity-free payload rather than an error: reachability stays
-    /// observable, and authorized verbs surface the auth failure properly.
+    /// hints or account identity. A request that presents the owner's
+    /// same-account Stack token is answered with the Mac's identity. Local
+    /// pairing is connection-bound and is handled by
+    /// ``connectionStatusResult(for:authorization:supportsArtifactLane:localPairingAuthorization:stackStatus:)``
+    /// before this Stack-only path is reached.
     /// Verification goes through the same gate as the authorized verbs
     /// (``verifiedStackCaller(for:)``), so a DEBUG dev-token client that can
     /// list workspaces also sees identity.
@@ -411,13 +410,6 @@ final class MobileHostService {
     /// picks it up later). A flood of unique garbage tokens therefore cannot
     /// queue unbounded Stack lookups behind this verb.
     nonisolated static func networkStatusResult(for request: MobileHostRPCRequest) async -> MobileHostRPCResult {
-        if await MainActor.run(body: {
-            MobileHostService.shared.localPairingAuthority.verifies(
-                request.auth?.attachToken
-            )
-        }) {
-            return MobileHostPublicStatusCache.result(includeIdentity: true)
-        }
         let trimmedToken = request.auth?.stackAccessToken?.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmedToken?.isEmpty == false else {
             return MobileHostPublicStatusCache.result(includeIdentity: false)
@@ -1357,6 +1349,14 @@ final class MobileHostService {
             await Self.acceptTransport(
                 transport,
                 authorization: .legacyPrivateNetworkListener,
+                localPairingAuthorization: { request in
+                    await MainActor.run {
+                        MobileHostService.shared.authorizesLocalPairing(
+                            request,
+                            connectionPath: connection.currentPath
+                        )
+                    }
+                },
                 isCurrent: {
                     await MobileHostService.shared.canAcceptConnection(
                         generation: generation
@@ -1372,6 +1372,9 @@ final class MobileHostService {
         authorization: MobileHostConnectionAuthorizationContext,
         artifactTransfers: MobileHostIrohArtifactTransferRegistry? = nil,
         independentEventWriter: (any MobileHostIndependentEventWriting)? = nil,
+        localPairingAuthorization: @escaping @Sendable (MobileHostRPCRequest) async -> Bool = { _ in
+            false
+        },
         promoteUsableSession: @escaping @Sendable () async -> Bool = { true },
         remoteControlDisabledByPolicy: @escaping @Sendable () -> Bool = {
             MobileRemoteControlPolicy.isDisabled
@@ -1407,6 +1410,7 @@ final class MobileHostService {
                 await Self.connectionAuthorizationError(
                     for: request,
                     authorization: authorization,
+                    localPairingAuthorization: localPairingAuthorization,
                     stackAuthorization: { request in
                         await MobileHostService.shared.authorizationError(for: request)
                     }
@@ -1431,6 +1435,7 @@ final class MobileHostService {
                         for: request,
                         authorization: authorization,
                         supportsArtifactLane: artifactTransfers != nil,
+                        localPairingAuthorization: localPairingAuthorization,
                         stackStatus: { request in
                             await MobileHostService.networkStatusResult(for: request)
                         }
@@ -1487,11 +1492,17 @@ final class MobileHostService {
     nonisolated static func connectionAuthorizationError(
         for request: MobileHostRPCRequest,
         authorization: MobileHostConnectionAuthorizationContext,
+        localPairingAuthorization: @escaping @Sendable (MobileHostRPCRequest) async -> Bool = { _ in
+            false
+        },
         stackAuthorization: @escaping @Sendable (MobileHostRPCRequest) async -> MobileHostRPCResult?
     ) async -> MobileHostRPCResult? {
         switch authorization {
         case .stackBearer:
             guard requiresAuthorization(method: request.method) else { return nil }
+            if await localPairingAuthorization(request) {
+                return nil
+            }
             return await stackAuthorization(request)
         case .irohAdmission:
             return nil
@@ -1502,10 +1513,16 @@ final class MobileHostService {
         for request: MobileHostRPCRequest,
         authorization: MobileHostConnectionAuthorizationContext,
         supportsArtifactLane: Bool = false,
+        localPairingAuthorization: @escaping @Sendable (MobileHostRPCRequest) async -> Bool = { _ in
+            false
+        },
         stackStatus: @escaping @Sendable (MobileHostRPCRequest) async -> MobileHostRPCResult
     ) async -> MobileHostRPCResult {
         switch authorization {
         case .stackBearer:
+            if await localPairingAuthorization(request) {
+                return MobileHostPublicStatusCache.result(includeIdentity: true)
+            }
             return await stackStatus(request)
         case .irohAdmission:
             let phonePushStatus = await MainActor.run {
@@ -1578,7 +1595,7 @@ final class MobileHostService {
         let build = MobileHostBuildIdentity.current()
         let ticket = try ticketStore.createLocalPairingTicket(
             routes: routes,
-            capability: localPairingAuthority.issueCapability(),
+            capability: try localPairingAuthority.issueCapability(for: routes),
             macPairingCompatibilityVersion: CmxMobileDefaults.pairingCompatibilityVersion,
             macAppVersion: build.appVersion,
             macAppBuild: build.appBuild
@@ -1587,6 +1604,26 @@ final class MobileHostService {
             for: ticket,
             routeDisclosureMode: .localTailscalePairing,
             pairingURLScheme: pairingURLScheme
+        )
+    }
+
+    /// Combines both halves of account-free authorization: possession of the
+    /// route-bound capability and proof that this accepted connection arrived
+    /// on one of the exact Tailscale endpoints covered by that capability.
+    private func authorizesLocalPairing(
+        _ request: MobileHostRPCRequest,
+        connectionPath: NWPath?
+    ) -> Bool {
+        let routes = MobileHostPublicStatusCache.snapshot().filter {
+            $0.kind == .tailscale
+        }
+        guard let admission = MobileHostLegacyTailscaleAdmission(path: connectionPath),
+              admission.admittedRoute(in: routes) != nil else {
+            return false
+        }
+        return localPairingAuthority.verifies(
+            request.auth?.attachToken,
+            for: routes
         )
     }
 
@@ -1753,14 +1790,9 @@ final class MobileHostService {
         guard Self.requiresAuthorization(method: request.method) else {
             return nil
         }
-        if localPairingAuthority.verifies(request.auth?.attachToken) {
-            return nil
-        }
-        // The opt-in local capability was checked above. In the normal account
-        // path, Stack auth remains the authorization gate: every operation must
-        // present the Mac owner's same-account access token. The ordinary attach
-        // ticket only supplies route and workspace context and never authorizes
-        // on its own.
+        // Local pairing is checked by the connection-aware admission gate
+        // before this Stack-only path. The ordinary attach ticket only supplies
+        // route and workspace context and never authorizes on its own.
         if devStackTokenAuthorized(request) {
             return ticketAuthorizationResultIfNeeded(for: request)
         }

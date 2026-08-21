@@ -41,6 +41,19 @@ public struct SocketClientCapabilityAuthority: @unchecked Sendable {
         return issueCapability(nonce: nonce)
     }
 
+    /// Issues a capability whose signature is valid only for `binding`.
+    ///
+    /// Use this form when possession of the token is only one part of the
+    /// authority. The verifier must independently reconstruct the same
+    /// security context and pass it to ``verifies(_:binding:)``.
+    public func issueCapability(binding: Data) -> String {
+        var generator = SystemRandomNumberGenerator()
+        let nonce = Data((0..<Self.secureByteCount).map { _ in
+            UInt8.random(in: .min ... .max, using: &generator)
+        })
+        return issueCapability(binding: binding, nonce: nonce)
+    }
+
     /// Issues a capability from an explicit nonce.
     ///
     /// This initializer-shaped seam makes signing deterministic in tests;
@@ -55,6 +68,16 @@ public struct SocketClientCapabilityAuthority: @unchecked Sendable {
             using: signingKey
         )
         return "v1.\(base64URLEncoded(nonce)).\(base64URLEncoded(Data(signature)))"
+    }
+
+    /// Deterministic test seam for a context-bound capability.
+    func issueCapability(binding: Data, nonce: Data) -> String {
+        guard !binding.isEmpty, nonce.count == Self.secureByteCount else { return "" }
+        let signature = HMAC<SHA256>.authenticationCode(
+            for: boundAuthenticationMessage(binding: binding, nonce: nonce),
+            using: signingKey
+        )
+        return "v2.\(base64URLEncoded(nonce)).\(base64URLEncoded(Data(signature)))"
     }
 
     /// Verifies that a capability was issued by this audience-scoped authority.
@@ -78,8 +101,37 @@ public struct SocketClientCapabilityAuthority: @unchecked Sendable {
         )
     }
 
+    /// Verifies a capability against the exact external context it was
+    /// issued for. An unbound v1 token is never accepted by this gate.
+    public func verifies(_ capability: String, binding: Data) -> Bool {
+        guard !binding.isEmpty else { return false }
+        let components = capability.split(separator: ".", omittingEmptySubsequences: false)
+        guard components.count == 3,
+              components[0] == "v2",
+              let nonce = base64URLDecoded(String(components[1])),
+              nonce.count == Self.secureByteCount,
+              let signature = base64URLDecoded(String(components[2])),
+              signature.count == SHA256.byteCount else {
+            return false
+        }
+        return HMAC<SHA256>.isValidAuthenticationCode(
+            signature,
+            authenticating: boundAuthenticationMessage(binding: binding, nonce: nonce),
+            using: signingKey
+        )
+    }
+
     private func authenticationMessage(nonce: Data) -> Data {
         Data("cmux.socket-capability.token.v1\0".utf8) + nonce
+    }
+
+    private func boundAuthenticationMessage(binding: Data, nonce: Data) -> Data {
+        var bindingLength = UInt64(binding.count).bigEndian
+        let encodedLength = withUnsafeBytes(of: &bindingLength) { Data($0) }
+        return Data("cmux.socket-capability.bound-token.v1\0".utf8)
+            + encodedLength
+            + binding
+            + nonce
     }
 
     private func base64URLEncoded(_ data: Data) -> String {

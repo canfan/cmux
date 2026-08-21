@@ -141,7 +141,8 @@ public struct CmxPairingQRCode: Sendable {
             })
             items = compatibilityItems
         case .localTailscalePairing:
-            guard let routes = encodableTailscaleRoutes(of: ticket),
+            guard ticket.localPairing,
+                  let routes = encodableTailscaleRoutes(of: ticket),
                   let deviceID = normalizedNonEmpty(ticket.macDeviceID),
                   let bearer = normalizedNonEmpty(ticket.authToken) else {
                 return nil
@@ -180,7 +181,8 @@ public struct CmxPairingQRCode: Sendable {
         case .legacyPrivateNetworkCompatibility:
             encodableTailscaleRoutes(of: ticket) != nil
         case .localTailscalePairing:
-            encodableTailscaleRoutes(of: ticket) != nil
+            ticket.localPairing
+                && encodableTailscaleRoutes(of: ticket) != nil
                 && normalizedNonEmpty(ticket.macDeviceID) != nil
                 && normalizedNonEmpty(ticket.authToken) != nil
         }

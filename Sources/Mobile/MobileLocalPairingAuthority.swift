@@ -1,3 +1,4 @@
+import CMUXMobileCore
 import CmuxControlSocket
 import Foundation
 
@@ -26,14 +27,60 @@ struct MobileLocalPairingAuthority: Sendable {
         )
     }
 
-    func issueCapability() -> String {
-        authority.issueCapability()
+    /// Deterministic authority seam for route-binding tests.
+    init(secret: Data, audience: String) {
+        authority = SocketClientCapabilityAuthority(
+            secret: secret,
+            audience: audience
+        )
     }
 
-    func verifies(_ capability: String?) -> Bool {
+    func issueCapability(for routes: [CmxAttachRoute]) throws -> String {
+        authority.issueCapability(binding: try Self.binding(for: routes))
+    }
+
+    func verifies(_ capability: String?, for routes: [CmxAttachRoute]) -> Bool {
         guard let capability = capability?
             .trimmingCharacters(in: .whitespacesAndNewlines),
               !capability.isEmpty else { return false }
-        return authority.verifies(capability)
+        guard let binding = try? Self.binding(for: routes) else { return false }
+        return authority.verifies(capability, binding: binding)
     }
+
+    /// Canonicalizes only the disclosed numeric Tailscale destinations. Route
+    /// ids, priorities, and ordering do not grant authority, so semantically
+    /// identical route sets produce one stable binding.
+    private static func binding(for routes: [CmxAttachRoute]) throws -> Data {
+        guard !routes.isEmpty else {
+            throw MobileLocalPairingAuthorityError.noTailscaleRoutes
+        }
+        let destinations = try routes.map { route -> String in
+            guard route.kind == .tailscale,
+                  case let .hostPort(host, port) = route.endpoint else {
+                throw MobileLocalPairingAuthorityError.invalidTailscaleRoute
+            }
+            let destination: CmxUserTailscalePairingAuthorization
+            do {
+                destination = try CmxUserTailscalePairingAuthorization(
+                    host: host,
+                    port: port
+                )
+            } catch {
+                throw MobileLocalPairingAuthorityError.invalidTailscaleRoute
+            }
+            return "\(destination.host.utf8.count):\(destination.host):\(destination.port)"
+        }
+        let uniqueDestinations = Set(destinations)
+        guard uniqueDestinations.count == destinations.count else {
+            throw MobileLocalPairingAuthorityError.duplicateTailscaleRoute
+        }
+        let payload = uniqueDestinations.sorted().joined(separator: "\n")
+        return Data("cmux.mobile-local-pairing.routes.v1\0\(payload)".utf8)
+    }
+}
+
+enum MobileLocalPairingAuthorityError: Error, Equatable, Sendable {
+    case noTailscaleRoutes
+    case invalidTailscaleRoute
+    case duplicateTailscaleRoute
 }

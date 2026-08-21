@@ -222,6 +222,8 @@ public enum CmxAttachTicketError: Error, Equatable, Sendable {
     case unsupportedVersion(Int)
     case noRoutes
     case emptyAuthToken
+    case localPairingRequiresAuthToken
+    case localPairingCannotExpire
 }
 
 public struct CmxAttachTicket: Codable, Equatable, Sendable {
@@ -375,6 +377,14 @@ public struct CmxAttachTicket: Codable, Equatable, Sendable {
         if let authToken {
             guard !authToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 throw CmxAttachTicketError.emptyAuthToken
+            }
+        }
+        if localPairing {
+            guard authToken != nil else {
+                throw CmxAttachTicketError.localPairingRequiresAuthToken
+            }
+            guard expiresAt == nil else {
+                throw CmxAttachTicketError.localPairingCannotExpire
             }
         }
         guard !routes.isEmpty else {

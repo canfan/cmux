@@ -17,6 +17,52 @@ enum MobileHostConnectionAuthorizationContext: Equatable, Sendable {
     case irohAdmission(CmxIrohAdmittedPeer)
 }
 
+/// Proof extracted from the accepted TCP connection itself before a local
+/// pairing capability can authorize RPCs. The listener's local endpoint must
+/// be one of the currently disclosed numeric Tailscale routes and the path
+/// must traverse a Tailscale tunnel interface.
+struct MobileHostLegacyTailscaleAdmission: Equatable, Sendable {
+    private let destination: CmxUserTailscalePairingAuthorization
+
+    init?(
+        localHost: String,
+        localPort: Int,
+        interfaceNames: [String]
+    ) {
+        guard interfaceNames.contains(where: { $0.hasPrefix("utun") }),
+              let destination = try? CmxUserTailscalePairingAuthorization(
+                  host: localHost,
+                  port: localPort
+              ) else {
+            return nil
+        }
+        self.destination = destination
+    }
+
+    init?(path: NWPath?) {
+        guard let path,
+              path.status == .satisfied,
+              case let .hostPort(host, port) = path.localEndpoint else {
+            return nil
+        }
+        self.init(
+            localHost: String(describing: host),
+            localPort: Int(port.rawValue),
+            interfaceNames: path.availableInterfaces.map(\.name)
+        )
+    }
+
+    func admittedRoute(in routes: [CmxAttachRoute]) -> CmxAttachRoute? {
+        routes.first { route in
+            guard route.kind == .tailscale,
+                  case let .hostPort(host, port) = route.endpoint else {
+                return false
+            }
+            return destination.authorizes(host: host, port: port)
+        }
+    }
+}
+
 extension MobileHostConnectionAuthorizationContext {
     /// One policy authority for transports accepted by the legacy
     /// private-network listener. Keeping this separate from Iroh admission

@@ -76,6 +76,7 @@ public struct MobileRootAuthGate {
         hasActiveUnexpiredTicket: Bool,
         persistsAcrossDisconnect: Bool = false
     ) -> Bool {
+        guard !persistsAcrossDisconnect else { return false }
         switch pairingResult {
         case .connected:
             return connectionState != .connected || !hasActiveUnexpiredTicket

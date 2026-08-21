@@ -258,8 +258,14 @@ struct CmxTailscaleRouteProofValidator {
         // A still-connecting dial has no bound endpoints yet; those facts are
         // asserted at ready and at every write boundary instead.
         guard phase == .established else { return }
-        guard let localAddress = connectionPath.localAddress,
-              proof.selfAddresses.contains(localAddress) else {
+        // On physical iOS devices, Network.framework can omit
+        // `NWPath.localEndpoint` for a connection constrained to a packet-
+        // tunnel interface. The required interface and exact remote endpoint
+        // remain authoritative in that case. If iOS does expose a local
+        // endpoint, it must still be one of the Tailscale addresses captured
+        // for that interface.
+        if let localAddress = connectionPath.localAddress,
+           !proof.selfAddresses.contains(localAddress) {
             throw CmxTailscaleRouteProofError.localEndpointMismatch
         }
         guard connectionPath.remoteAddress == proof.peerAddress else {

@@ -52,6 +52,10 @@ struct CMUXMobileRootView: View {
     #endif
     @State private var pendingAttachURL: String?
     @State private var didAuthenticateWithAttachTicket = false
+    /// Local-pairing capabilities are durable credentials, so a transient
+    /// transport interruption must not clear shell authentication while the
+    /// connection recovery path redials the saved Mac.
+    @State private var hasPersistentLocalPairingAuthentication = false
     /// Prevents the initial authenticated publication from dialing before the
     /// auth coordinator finishes loading the account's effective team. That
     /// first team transition invalidates attempts created in the teamless
@@ -1009,7 +1013,9 @@ struct CMUXMobileRootView: View {
     }
 
     private var hasActiveAttachTicketAuthentication: Bool {
-        didAuthenticateWithAttachTicket && store.hasActiveUnexpiredAttachTicket
+        didAuthenticateWithAttachTicket
+            && (hasPersistentLocalPairingAuthentication
+                || store.hasActiveUnexpiredAttachTicket)
     }
 
     private func syncShellAuthentication(
@@ -1193,6 +1199,7 @@ struct CMUXMobileRootView: View {
             return
         }
         didAuthenticateWithAttachTicket = true
+        hasPersistentLocalPairingAuthentication = isLocalPairingURL(rawURL)
         syncShellAuthentication(true)
         startOpenURLConnection(
             rawURL,
@@ -1318,18 +1325,26 @@ struct CMUXMobileRootView: View {
         guard MobileRootAuthGate.shouldClearAttachTicketAuthentication(
             pairingResult: result,
             connectionState: store.connectionState,
-            hasActiveUnexpiredTicket: store.hasActiveUnexpiredAttachTicket
+            hasActiveUnexpiredTicket: store.hasActiveUnexpiredAttachTicket,
+            persistsAcrossDisconnect: hasPersistentLocalPairingAuthentication
         ) else { return }
         didAuthenticateWithAttachTicket = false
+        hasPersistentLocalPairingAuthentication = false
         syncShellAuthentication(authManager.isAuthenticated)
     }
 
     private func clearAttachTicketAuthenticationIfNeeded() {
         guard didAuthenticateWithAttachTicket,
-              store.connectionState != .connected || !store.hasActiveUnexpiredAttachTicket else {
+              MobileRootAuthGate.shouldClearAttachTicketAuthentication(
+                pairingResult: .superseded,
+                connectionState: store.connectionState,
+                hasActiveUnexpiredTicket: store.hasActiveUnexpiredAttachTicket,
+                persistsAcrossDisconnect: hasPersistentLocalPairingAuthentication
+              ) else {
             return
         }
         didAuthenticateWithAttachTicket = false
+        hasPersistentLocalPairingAuthentication = false
         syncShellAuthentication(authManager.isAuthenticated)
     }
 
@@ -1341,6 +1356,7 @@ struct CMUXMobileRootView: View {
             // front and only then runs its bounded best-effort server teardown
             // (push-token DELETE, Stack session revocation).
             didAuthenticateWithAttachTicket = false
+            hasPersistentLocalPairingAuthentication = false
             didExceedStartupRestoringGate = false
             startupConnectionCoordinator.reset()
             // Hard context switch: queued toasts must not outlive the

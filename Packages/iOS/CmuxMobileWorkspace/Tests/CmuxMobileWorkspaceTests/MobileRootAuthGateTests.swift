@@ -104,6 +104,18 @@ import Testing
             connectionState: .connected,
             hasActiveUnexpiredTicket: false
         ))
+        #expect(!MobileRootAuthGate.shouldClearAttachTicketAuthentication(
+            pairingResult: .connected,
+            connectionState: .disconnected,
+            hasActiveUnexpiredTicket: false,
+            persistsAcrossDisconnect: true
+        ))
+        #expect(!MobileRootAuthGate.shouldClearAttachTicketAuthentication(
+            pairingResult: .failed,
+            connectionState: .disconnected,
+            hasActiveUnexpiredTicket: false,
+            persistsAcrossDisconnect: true
+        ))
         #expect(MobileRootAuthGate.shouldReconnectStoredMac(
             stackAuthenticated: true,
             attachTicketAuthenticated: false,

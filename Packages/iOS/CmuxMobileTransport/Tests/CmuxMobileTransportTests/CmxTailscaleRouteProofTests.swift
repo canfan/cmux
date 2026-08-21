@@ -120,6 +120,26 @@ private let tailscaleInterface = CmxNetworkInterfaceIdentity(name: "utun4", inde
         #expect(ipv4Proof.request.expectedPeerDeviceID == "mac-1")
     }
 
+    @Test func acceptsOmittedLocalEndpointOnExactTailscalePath() throws {
+        let snapshot = authoritySnapshot(generation: 41)
+        let proof = try CmxTailscaleRouteProofValidator().prepare(
+            request: tailscaleRequest(host: "100.71.210.41"),
+            snapshot: snapshot
+        )
+
+        try CmxTailscaleRouteProofValidator().validate(
+            proof: proof,
+            authoritySnapshot: snapshot,
+            connectionPath: CmxTailscaleConnectionPathSnapshot(
+                isSatisfied: true,
+                availableInterfaces: [tailscaleInterface],
+                localAddress: nil,
+                remoteAddress: CmxTailscaleIPAddress("100.71.210.41"),
+                remotePort: 58_465
+            )
+        )
+    }
+
     @Test func rejectsGenerationInterfaceAndEffectiveEndpointSubstitution() throws {
         let request = try tailscaleRequest(host: "100.71.210.41")
         let snapshot = authoritySnapshot(generation: 41)
@@ -149,6 +169,19 @@ private let tailscaleInterface = CmxNetworkInterfaceIdentity(name: "utun4", inde
                     remotePort: 58_465
                 ),
                 phase: .established
+            )
+        }
+        #expect(throws: CmxTailscaleRouteProofError.localEndpointMismatch) {
+            try CmxTailscaleRouteProofValidator().validate(
+                proof: proof,
+                authoritySnapshot: snapshot,
+                connectionPath: CmxTailscaleConnectionPathSnapshot(
+                    isSatisfied: true,
+                    availableInterfaces: [tailscaleInterface],
+                    localAddress: CmxTailscaleIPAddress("100.64.0.6"),
+                    remoteAddress: CmxTailscaleIPAddress("100.71.210.41"),
+                    remotePort: 58_465
+                )
             )
         }
         #expect(throws: CmxTailscaleRouteProofError.remoteEndpointMismatch) {

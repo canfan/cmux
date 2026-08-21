@@ -68,11 +68,13 @@ public struct MobileRootAuthGate {
     ///   - pairingResult: The result of the most recent pairing-URL connection.
     ///   - connectionState: The current connection state.
     ///   - hasActiveUnexpiredTicket: Whether a non-expired attach ticket is still active.
+    ///   - persistsAcrossDisconnect: Whether the credential is a durable local-pairing capability.
     /// - Returns: `true` when the attach auth is no longer backed by a live, ticketed connection.
     public static func shouldClearAttachTicketAuthentication(
         pairingResult: MobilePairingURLConnectionResult,
         connectionState: MobileConnectionState,
-        hasActiveUnexpiredTicket: Bool
+        hasActiveUnexpiredTicket: Bool,
+        persistsAcrossDisconnect: Bool = false
     ) -> Bool {
         switch pairingResult {
         case .connected:

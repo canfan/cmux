@@ -145213,6 +145213,76 @@
         }
       }
     },
+    "mobile.pairing.paired.connected": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Connected over Tailscale" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "Tailscale経由で接続中" } }
+      }
+    },
+    "mobile.pairing.paired.forget": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Disconnect and Forget" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "接続を解除して削除" } }
+      }
+    },
+    "mobile.pairing.paired.lastSeen": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Offline · Last seen %@" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "オフライン · 最終接続 %@" } }
+      }
+    },
+    "mobile.pairing.paired.offline": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Offline" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "オフライン" } }
+      }
+    },
+    "mobile.pairing.paired.oneDevice": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Local pairing is limited to one iPhone. Forget this device before pairing another." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ローカルペアリングは1台のiPhoneに限定されます。別のデバイスをペアリングする前に、このデバイスを削除してください。" } }
+      }
+    },
+    "mobile.pairing.paired.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Paired with this Mac" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "このMacとペアリング済み" } }
+      }
+    },
+    "sidebar.mobile.paired.connected": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "%@ · Connected" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%@ · 接続中" } }
+      }
+    },
+    "sidebar.mobile.paired.lastSeen": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "%@ · Offline · Last seen %@" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%@ · オフライン · 最終接続 %@" } }
+      }
+    },
+    "sidebar.mobile.paired.offline": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "%@ · Offline" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%@ · オフライン" } }
+      }
+    },
+    "sidebar.workspace.mobileActive.tooltip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Open on the paired iPhone" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ペアリング済みiPhoneで開いています" } }
+      }
+    },
     "mobile.pairing.checking": {
       "extractionState": "manual",
       "localizations": {

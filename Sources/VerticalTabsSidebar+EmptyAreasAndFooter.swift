@@ -447,6 +447,7 @@ struct SidebarAccountAvatar: View {
 struct SidebarMobileConnectButton: View {
     @EnvironmentObject private var tabManager: TabManager
     private let title = String(localized: "command.mobileConnect.title", defaultValue: "Open Tailscale Pairing")
+    @State private var pairedDevice = MobileHostService.shared.localPairingDeviceSnapshot
 #if DEBUG
     @AppStorage(SidebarFooterMobileIconDebugSettings.sizeKey)
     private var debugIconSize = SidebarFooterMobileIconDebugSettings.defaultSize
@@ -471,22 +472,76 @@ struct SidebarMobileConnectButton: View {
                     debugSource: "sidebar.mobileConnect"
                 )
             } label: {
-                CmuxSystemSymbolImage(systemName: "iphone", pointSize: iconSize, weight: .medium)
+                if let pairedDevice {
+                    HStack(spacing: 5) {
+                        CmuxSystemSymbolImage(
+                            systemName: "iphone",
+                            pointSize: iconSize,
+                            weight: .medium
+                        )
+                        Text(pairedDevice.displayName)
+                            .font(.system(size: 10, weight: .medium))
+                            .lineLimit(1)
+                        Circle()
+                            .fill(pairedDevice.isConnected ? Color.green : Color.secondary)
+                            .frame(width: 6, height: 6)
+                    }
                     .foregroundStyle(.secondary)
-                    .frame(
-                        width: SidebarFooterButtonMetrics.buttonSize,
-                        height: SidebarFooterButtonMetrics.buttonSize
-                    )
+                    .padding(.horizontal, 6)
+                    .frame(height: SidebarFooterButtonMetrics.buttonSize)
+                } else {
+                    CmuxSystemSymbolImage(systemName: "iphone", pointSize: iconSize, weight: .medium)
+                        .foregroundStyle(.secondary)
+                        .frame(
+                            width: SidebarFooterButtonMetrics.buttonSize,
+                            height: SidebarFooterButtonMetrics.buttonSize
+                        )
+                }
             }
             .buttonStyle(SidebarFooterIconButtonStyle())
-            .frame(
-                width: SidebarFooterButtonMetrics.buttonSize,
-                height: SidebarFooterButtonMetrics.buttonSize
-            )
-            .safeHelp(title)
+            .frame(height: SidebarFooterButtonMetrics.buttonSize)
+            .safeHelp(statusHelp)
             .accessibilityLabel(title)
             .accessibilityIdentifier("SidebarMobileConnectButton")
+            .onReceive(
+                NotificationCenter.default.publisher(for: .mobileHostStatusDidChange)
+            ) { _ in
+                pairedDevice = MobileHostService.shared.localPairingDeviceSnapshot
+            }
         }
+    }
+
+    private var statusHelp: String {
+        guard let pairedDevice else { return title }
+        if pairedDevice.isConnected {
+            return String(
+                format: String(
+                    localized: "sidebar.mobile.paired.connected",
+                    defaultValue: "%@ · Connected"
+                ),
+                locale: .current,
+                pairedDevice.displayName
+            )
+        }
+        if let lastSeen = pairedDevice.lastSeen {
+            return String(
+                format: String(
+                    localized: "sidebar.mobile.paired.lastSeen",
+                    defaultValue: "%@ · Offline · Last seen %@"
+                ),
+                locale: .current,
+                pairedDevice.displayName,
+                lastSeen.formatted(.relative(presentation: .named))
+            )
+        }
+        return String(
+            format: String(
+                localized: "sidebar.mobile.paired.offline",
+                defaultValue: "%@ · Offline"
+            ),
+            locale: .current,
+            pairedDevice.displayName
+        )
     }
 }
 

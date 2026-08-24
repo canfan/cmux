@@ -59,6 +59,7 @@ struct SidebarAppKitRowCellTests {
     fileprivate static func makeModel(
         workspaceId: UUID = UUID(),
         isActive: Bool = false,
+        isMobileActive: Bool = false,
         isPinned: Bool = false,
         canClose: Bool = true,
         settings: SidebarTabItemSettingsSnapshot? = nil,
@@ -88,6 +89,7 @@ struct SidebarAppKitRowCellTests {
             unreadCount: 0,
             latestNotificationText: nil,
             showsAgentActivity: resolvedSettings.details.showAgentActivity,
+            isMobileActive: isMobileActive,
             rowSpacing: 8,
             isBeingDragged: false,
             topDropIndicatorVisible: false,
@@ -129,6 +131,7 @@ struct SidebarAppKitRowCellTests {
             unreadCount: 0,
             latestNotificationText: nil,
             showsAgentActivity: settings.details.showAgentActivity,
+            isMobileActive: false,
             rowSpacing: 8,
             showsModifierShortcutHints: false,
             isPointerHovering: false,
@@ -1944,6 +1947,24 @@ struct SidebarAppKitRowCellTests {
         activeCell.showOptimisticDeselection()
         #expect(activeApplied == [false])
         #expect(activeCell.currentModelForMeasurement?.isActive == true)
+    }
+
+    @Test
+    func mobileActiveWorkspaceShowsThePhoneIndicator() throws {
+        let cell = Self.configuredCell(model: Self.makeModel(isMobileActive: true))
+        let indicator = try #require(
+            Self.descendants(of: cell)
+                .compactMap { $0 as? NSImageView }
+                .first {
+                    !$0.isHidden
+                        && $0.toolTip == String(
+                            localized: "sidebar.workspace.mobileActive.tooltip",
+                            defaultValue: "Open on the paired iPhone"
+                        )
+                }
+        )
+
+        #expect(indicator.image != nil)
     }
 
     @Test

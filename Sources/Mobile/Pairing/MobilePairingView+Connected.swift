@@ -4,6 +4,67 @@ import SwiftUI
 
 extension MobilePairingView {
     @ViewBuilder
+    func pairedContent(_ device: MobileLocalPairingDeviceSnapshot) -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: device.isConnected ? "iphone.radiowaves.left.and.right" : "iphone")
+                .cmuxFont(size: 36)
+                .foregroundStyle(device.isConnected ? Color.green : Color.secondary)
+            Text(device.displayName)
+                .cmuxFont(.title3, weight: .semibold)
+            Text(String(
+                localized: "mobile.pairing.paired.title",
+                defaultValue: "Paired with this Mac"
+            ))
+                .foregroundStyle(.secondary)
+            if device.isConnected {
+                Text(String(
+                    localized: "mobile.pairing.paired.connected",
+                    defaultValue: "Connected over Tailscale"
+                ))
+                    .cmuxFont(.callout)
+                    .foregroundStyle(.green)
+            } else if let lastSeen = device.lastSeen {
+                Text(String(
+                    format: String(
+                        localized: "mobile.pairing.paired.lastSeen",
+                        defaultValue: "Offline · Last seen %@"
+                    ),
+                    locale: .current,
+                    lastSeen.formatted(.relative(presentation: .named))
+                ))
+                    .cmuxFont(.callout)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text(String(
+                    localized: "mobile.pairing.paired.offline",
+                    defaultValue: "Offline"
+                ))
+                    .cmuxFont(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            Text(String(
+                localized: "mobile.pairing.paired.oneDevice",
+                defaultValue: "Local pairing is limited to one iPhone. Forget this device before pairing another."
+            ))
+                .cmuxFont(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            Button(
+                String(
+                    localized: "mobile.pairing.paired.forget",
+                    defaultValue: "Disconnect and Forget"
+                ),
+                role: .destructive
+            ) {
+                Task { await model.forgetLocalPairingDevice() }
+            }
+            .buttonStyle(.bordered)
+        }
+        .frame(maxWidth: .infinity, minHeight: 240)
+    }
+
+    @ViewBuilder
     var connectedContent: some View {
         VStack(spacing: 12) {
             Image(systemName: "checkmark.circle.fill")

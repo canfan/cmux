@@ -14,6 +14,10 @@ import Foundation
 import OSLog
 import SwiftUI
 
+#if os(iOS)
+import UIKit
+#endif
+
 #if canImport(UIKit) && DEBUG
 import CmuxMobileTerminal
 #endif
@@ -494,6 +498,17 @@ public struct CMUXMobileRootScene: View {
             )
         }
         let deviceRegistry = makeDeviceRegistry(pairedMacStore: backedUpPairedMacStore)
+        let deviceWitness = DeviceRegistryService.currentDeviceWitness()
+        let localDeviceID = auth.appNamespace?.deviceRegistryDeviceID(
+            keychainAccessGroup: auth.keychainAccessGroup,
+            deviceWitness: deviceWitness,
+            evidence: MobileIrohRuntimeComposition.sameDeviceEvidenceProbe()
+        )
+        #if os(iOS)
+        let localDeviceName = UIDevice.current.name
+        #else
+        let localDeviceName = "iPhone"
+        #endif
         let hiddenMacStore = UserDefaultsPairedMacHiddenStore()
         let feedbackEmailSubmitter = MobileFeedbackEmailClient(apiBaseURL: auth.config.apiBaseURL)
         let feedbackStampProvider: @MainActor () -> MobileFeedbackStamp = {
@@ -519,6 +534,8 @@ public struct CMUXMobileRootScene: View {
             personalIrohDiscovery: personalIrohDiscovery,
             personalIrohForget: resolvedPersonalIrohForget,
             presence: makePresenceClient(),
+            localDeviceID: localDeviceID,
+            localDeviceName: localDeviceName,
             identityProvider: identityProvider,
             teamIDProvider: { await coordinator.resolvedTeamID },
             reachability: reachability,

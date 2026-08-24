@@ -907,6 +907,9 @@ public final class MobileShellComposite: MobileTerminalOutputSinking {
                 pendingLocalBrowserTabRestoreWorkspaceID = nil
             }
             syncSelectedTerminalForWorkspace()
+            if selectedWorkspaceID != oldValue {
+                refreshTerminalEventSubscription(reason: "mobile_presence_workspace")
+            }
         }
     }
     /// The Mac surface shown in the workspace detail instead of the selected
@@ -915,8 +918,9 @@ public final class MobileShellComposite: MobileTerminalOutputSinking {
     /// terminal and composer draft) and cleared when the workspace changes.
     public var selectedMacSurfaceID: MobileSurfacePreview.ID? {
         didSet {
-            guard selectedMacSurfaceID != oldValue, let selectedMacSurfaceID,
-                  !isSyncingDerivedTabSelection else { return }
+            guard selectedMacSurfaceID != oldValue else { return }
+            refreshTerminalEventSubscription(reason: "mobile_presence_surface")
+            guard let selectedMacSurfaceID, !isSyncingDerivedTabSelection else { return }
             // An unsuppressed non-nil change is an explicit tab open (the
             // picker or a deep link), so it both wins over a pending restore
             // and becomes the remembered tab. Derived promotions inside the
@@ -980,6 +984,7 @@ public final class MobileShellComposite: MobileTerminalOutputSinking {
                 composerFocusRequestPending = false
                 composerFocusRequestTerminalID = nil
             }
+            refreshTerminalEventSubscription(reason: "mobile_presence_terminal")
         }
     }
 
@@ -1077,6 +1082,10 @@ public final class MobileShellComposite: MobileTerminalOutputSinking {
     private let multiMacAggregationDefaults: UserDefaults
     let hiddenMacStore: any PairedMacHiddenStoring
     let clientID: String
+    /// Durable physical-phone identity reported to a locally paired Mac.
+    let localDeviceID: String
+    /// Best available user-facing phone label reported to a locally paired Mac.
+    let localDeviceName: String
     /// Delivers the email path of Send Feedback (`/api/feedback`). `nil` when the
     /// web API base URL is unavailable; the email path then fails closed and the
     /// UI surfaces an error rather than silently dropping the report.
@@ -1756,7 +1765,10 @@ public final class MobileShellComposite: MobileTerminalOutputSinking {
 
     /// Create a mobile shell store with injectable runtime services for app
     /// composition, previews, and package tests.
-    /// - Parameter browserStreamEvents: App-lifetime browser stream state kept outside workspace previews.
+    /// - Parameters:
+    ///   - localDeviceID: Stable identifier reported to a locally paired Mac.
+    ///   - localDeviceName: Human-readable device name shown by the paired Mac.
+    ///   - browserStreamEvents: App-lifetime browser stream state kept outside workspace previews.
     public init(
         runtime: (any MobileSyncRuntime)? = nil,
         isSignedIn: Bool = false,
@@ -1773,6 +1785,8 @@ public final class MobileShellComposite: MobileTerminalOutputSinking {
         personalIrohForget: (any MobileIrohMacForgetting)? = nil,
         presence: (any PresenceSubscribing)? = nil,
         clientIDRepository: MobileClientIDRepository = MobileClientIDRepository(defaults: .standard),
+        localDeviceID: String? = nil,
+        localDeviceName: String? = nil,
         identityProvider: (any MobileIdentityProviding)? = nil,
         teamIDProvider: @escaping @Sendable () async -> String? = { nil },
         reachability: any ReachabilityProviding = ReachabilityService(),
@@ -1858,7 +1872,24 @@ public final class MobileShellComposite: MobileTerminalOutputSinking {
         // owns the `ios_app_first_launch` emit. The shell only needs the stable id
         // here — by the time it resolves, the value is already persisted, so its
         // `created` flag is always false and is intentionally not read.
-        self.clientID = clientIDRepository.resolveClientID().id
+        let resolvedClientID = clientIDRepository.resolveClientID().id
+        self.clientID = resolvedClientID
+        let normalizedDeviceID = localDeviceID?.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        if let normalizedDeviceID, !normalizedDeviceID.isEmpty {
+            self.localDeviceID = normalizedDeviceID
+        } else {
+            self.localDeviceID = resolvedClientID
+        }
+        let normalizedDeviceName = localDeviceName?.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        if let normalizedDeviceName, !normalizedDeviceName.isEmpty {
+            self.localDeviceName = normalizedDeviceName
+        } else {
+            self.localDeviceName = "iPhone"
+        }
         self.isSignedIn = isSignedIn
         self.connectionState = connectionState
         self.macConnectionStatus = connectionState == .connected ? .connected : .unavailable
@@ -12890,9 +12921,27 @@ public final class MobileShellComposite: MobileTerminalOutputSinking {
         do {
             var params: [String: Any] = [
                 "client_id": clientID,
+                "device_id": localDeviceID,
+                "device_name": localDeviceName,
                 "stream_id": terminalEventStreamID,
                 "topics": topics,
             ]
+            if let workspaceID = selectedWorkspace?.rpcWorkspaceID.rawValue
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+               !workspaceID.isEmpty {
+                params["active_workspace_id"] = workspaceID
+            } else {
+                params["active_workspace_id"] = NSNull()
+            }
+            let activeSurfaceID = selectedMacSurfaceID?.rawValue
+                ?? selectedTerminalID?.rawValue
+            if let activeSurfaceID = activeSurfaceID?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+               !activeSurfaceID.isEmpty {
+                params["active_surface_id"] = activeSurfaceID
+            } else {
+                params["active_surface_id"] = NSNull()
+            }
             // Negotiate screen-anchored render grids: the Mac then emits frames
             // anchored to the active area (with exact scrolled-row counts) so
             // this device owns a deep local scrollback and scrolls it locally.

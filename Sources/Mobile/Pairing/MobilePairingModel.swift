@@ -31,6 +31,10 @@ final class MobilePairingModel {
         /// connection count falls back to the baseline (the QR waiting state,
         /// or the Iroh-only waiting state when no Tailscale route exists).
         indirect case connected(from: State)
+        /// The one account-free phone retained by this Mac. This state remains
+        /// visible while the phone is offline; a new QR is unavailable until
+        /// the user explicitly forgets this pairing.
+        case paired(MobileLocalPairingDeviceSnapshot)
         /// No phone-reachable Tailscale route is available yet. Carries the
         /// live Iroh registration state so the window's Iroh tab keeps
         /// working while Tailscale QR pairing is unavailable.
@@ -190,6 +194,11 @@ final class MobilePairingModel {
             )
             return
         }
+        if usesLocalPairing, let device = status.localPairingDevice {
+            state = .paired(device)
+            observeHostStatus()
+            return
+        }
         guard let routePlan = PairingRoutePlan.make(routes: status.routes) else {
             state = .needsReachableTransport(
                 reachableViaIroh: Self.hasIrohRoute(status.routes)
@@ -295,6 +304,13 @@ final class MobilePairingModel {
         connectionObservationTask = nil
     }
 
+    /// Revokes the account-free phone and returns the flow to a fresh pairing
+    /// invitation. The host closes only connections owned by that capability.
+    func forgetLocalPairingDevice() async {
+        await host.forgetLocalPairingDevice()
+        await refresh()
+    }
+
     /// Watches the mobile host's status while the window is open: flips
     /// waiting states to `.connected` (and back) as phones attach and detach,
     /// keeps the route-derived transport diagnostics fresh, and re-mints when
@@ -317,6 +333,13 @@ final class MobilePairingModel {
             for await status in self.host.statusUpdates() {
                 if Task.isCancelled { return }
                 guard generation == self.refreshGeneration else { return }
+                if self.isUsingLocalPairing,
+                   let device = status.localPairingDevice {
+                    if self.state != .paired(device) {
+                        self.state = .paired(device)
+                    }
+                    continue
+                }
                 let next = Self.statusTransition(
                     from: self.state,
                     routes: status.routes,

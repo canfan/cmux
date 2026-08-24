@@ -25,6 +25,7 @@ struct SidebarWorkspaceRowSnapshot: Equatable {
     let unreadCount: Int
     let latestNotificationText: String?
     let showsAgentActivity: Bool
+    let isMobileActive: Bool
     let rowSpacing: CGFloat
     let showsModifierShortcutHints: Bool
     let isPointerHovering: Bool

@@ -217,6 +217,23 @@ final class MobileHostConnectionRegistry: @unchecked Sendable {
         }
     }
 
+    /// Removes an exact set of connection ids and returns their transports for
+    /// caller-owned asynchronous close outside the registry lock.
+    func removeConnections(ids: Set<UUID>) -> [MobileHostConnection] {
+        guard !ids.isEmpty else { return [] }
+        lock.lock()
+        let selected = connections.filter { ids.contains($0.key) }
+        for id in selected.keys { connections[id] = nil }
+        lock.unlock()
+        if !selected.isEmpty {
+            NotificationCenter.default.post(
+                name: .mobileHostStatusDidChange,
+                object: nil
+            )
+        }
+        return selected.values.map(\.connection)
+    }
+
     /// Retires reconnect overlap only after the replacement has processed an
     /// authorized request. An older connection can never evict a newer one,
     /// even if its delayed request finishes after the replacement arrived.

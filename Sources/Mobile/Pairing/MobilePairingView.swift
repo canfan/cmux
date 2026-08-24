@@ -10,7 +10,7 @@ import SwiftUI
 /// iPhones that use the explicit Tailscale connection method. Iroh remains an
 /// automatic, no-QR discovery path and is shown only as status information.
 struct MobilePairingView: View {
-    @State private var model = MobilePairingModel()
+    @State var model = MobilePairingModel()
     @State private var signInModel = AccountSignInModel(
         flow: AppDelegate.shared?.auth?.accountFlow
     )
@@ -142,6 +142,8 @@ struct MobilePairingView: View {
             failure(message: message)
         case let .ready(ready):
             readyContent(ready)
+        case let .paired(device):
+            pairedContent(device)
         case .connected:
             connectedContent
         }

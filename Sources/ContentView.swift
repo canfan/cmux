@@ -10967,6 +10967,7 @@ struct VerticalTabsSidebar: View, Equatable {
     // that prevents layout/realization from publishing row state (#6707).
     @State private var workspaceSnapshotsById: [UUID: SidebarWorkspaceSnapshotBuilder.Snapshot] = [:]
     @State private var extensionSidebarUpdateToken: UInt64 = 0
+    @State private var mobilePairingRevision: UInt64 = 0
     // Stable, memoized merged observation publishers for the extension
     // sidebar's `.onReceive` handlers. Rebuilding them inline each body pass
     // re-subscribed `.onReceive` to a fresh publisher every render, replaying
@@ -11268,6 +11269,7 @@ struct VerticalTabsSidebar: View, Equatable {
         let workspaceNumberShortcut: StoredShortcut
         let tabItemSettings: SidebarTabItemSettingsSnapshot
         let showsAgentActivity: Bool
+        let mobileActiveWorkspaceID: UUID?
         let pinResolutionContext: WorkspaceActionDispatcher.PinResolutionContext
         let tabIndexById: [UUID: Int]
         let numberedWorkspaceIndexById: [UUID: Int]
@@ -11366,6 +11368,10 @@ struct VerticalTabsSidebar: View, Equatable {
         // O(workspaces) projection pipeline. Reveal rebuilds one authoritative
         // snapshot from the current model before the controller applies again.
         let tabs = isPresented ? tabManager.tabs : []
+        let _ = mobilePairingRevision
+        let mobileActiveWorkspaceID = MobileHostService.shared
+            .localPairingDeviceSnapshot?
+            .activeWorkspaceID
         let workspaceCount = tabs.count
         let canCloseWorkspace = workspaceCount > 1
         let workspaceNumberShortcut = self.workspaceNumberShortcut
@@ -11441,6 +11447,7 @@ struct VerticalTabsSidebar: View, Equatable {
             tabItemSettings: tabItemSettings,
             showsAgentActivity: tabItemSettings.details.showAgentActivity
                 && CmuxFeatureFlags.shared.isSidebarWorkspaceAgentSpinnerEnabled,
+            mobileActiveWorkspaceID: mobileActiveWorkspaceID,
             pinResolutionContext: pinResolutionContext,
             tabIndexById: tabIndexById,
             numberedWorkspaceIndexById: numberedWorkspaceIndexById,
@@ -11525,6 +11532,9 @@ struct VerticalTabsSidebar: View, Equatable {
                 expandedChecklistWorkspaceIds.insert(workspaceId)
             }
             checklistAddFieldActivationTokens[workspaceId, default: 0] += 1
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .mobileHostStatusDidChange)) { _ in
+            mobilePairingRevision &+= 1
         }
         .onChange(of: dragState.draggedTabId) { newDraggedTabId in
 #if DEBUG
@@ -12230,6 +12240,7 @@ struct VerticalTabsSidebar: View, Equatable {
             unreadCount: input.unreadCount,
             latestNotificationText: input.latestNotificationText,
             showsAgentActivity: input.showsAgentActivity,
+            isMobileActive: input.isMobileActive,
             rowSpacing: input.rowSpacing,
             isBeingDragged: input.isBeingDragged,
             topDropIndicatorVisible: input.topDropIndicatorVisible,
@@ -14639,6 +14650,7 @@ struct VerticalTabsSidebar: View, Equatable {
             unreadCount: unreadSummary.unreadCount,
             latestNotificationText: liveLatestNotificationText,
             showsAgentActivity: renderContext.showsAgentActivity,
+            isMobileActive: renderContext.mobileActiveWorkspaceID == tab.id,
             rowSpacing: tabRowSpacing,
             showsModifierShortcutHints: resolvedShowsModifierShortcutHints,
             isPointerHovering: isPointerHovering,
@@ -15418,6 +15430,7 @@ struct TabItemView: View, Equatable {
     var unreadCount: Int { snapshot.unreadCount }
     var latestNotificationText: String? { snapshot.latestNotificationText }
     var showsAgentActivity: Bool { snapshot.showsAgentActivity }
+    var isMobileActive: Bool { snapshot.isMobileActive }
     var rowSpacing: CGFloat { snapshot.rowSpacing }
     var showsModifierShortcutHints: Bool { snapshot.showsModifierShortcutHints }
     var isPointerHovering: Bool { snapshot.isPointerHovering }
@@ -15753,6 +15766,19 @@ struct TabItemView: View, Equatable {
                     symbolPointSize: scaledFontSize(9),
                     audioColor: activeSecondaryColor(0.8)
                 )
+
+                if isMobileActive {
+                    CmuxSystemSymbolImage(
+                        magnified: "iphone",
+                        pointSize: scaledFontSize(9),
+                        weight: .semibold
+                    )
+                    .foregroundColor(activeSecondaryColor(0.8))
+                    .safeHelp(String(
+                        localized: "sidebar.workspace.mobileActive.tooltip",
+                        defaultValue: "Open on the paired iPhone"
+                    ))
+                }
 
                 let manualTaskStatusIndicator = SidebarWorkspaceManualTaskStatusIndicatorModel(
                     featureEnabled: todoControlsEnabled,

@@ -101,6 +101,7 @@ struct SidebarWorkspaceContextMenuWindowTargetsTests {
             unreadCount: 0,
             latestNotificationText: nil,
             showsAgentActivity: false,
+            isMobileActive: false,
             rowSpacing: 0,
             showsModifierShortcutHints: false,
             isPointerHovering: false,

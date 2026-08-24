@@ -31,6 +31,7 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
     private let mediaAudioView = NSImageView()
     private let mediaMicView = NSImageView()
     private let mediaCameraView = NSImageView()
+    private let mobileImageView = NSImageView()
     private let statusGlyphButton = SidebarRowTaskStatusGlyphButton()
     private let titleView = SidebarRowTextView(lines: 1)
     private let trailingBadge = SidebarRowUnreadBadgeView()
@@ -207,6 +208,8 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
             view.imageScaling = .scaleProportionallyDown
             contentContainer.addSubview(view)
         }
+        mobileImageView.imageScaling = .scaleProportionallyDown
+        contentContainer.addSubview(mobileImageView)
         statusGlyphButton.isHidden = true
         statusGlyphButton.onClick = { [weak self] in self?.toggleStatusPopover() }
         contentContainer.addSubview(statusGlyphButton)
@@ -454,6 +457,17 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
                 systemName: "video.fill", pointSize: model.scaled(9), weight: nil
             )
             mediaCameraView.contentTintColor = .systemGreen
+        }
+        mobileImageView.isHidden = !model.isMobileActive
+        if model.isMobileActive {
+            mobileImageView.image = RenderableSystemSymbol.configuredAppKitImage(
+                systemName: "iphone", pointSize: model.scaled(9), weight: .semibold
+            )
+            mobileImageView.contentTintColor = palette.secondary(0.8)
+            mobileImageView.toolTip = String(
+                localized: "sidebar.workspace.mobileActive.tooltip",
+                defaultValue: "Open on the paired iPhone"
+            )
         }
 
         // Manual task-status glyph (legacy `SidebarWorkspaceManualStatusIndicatorMenu`):
@@ -1145,6 +1159,11 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
         for view in [mediaAudioView, mediaMicView, mediaCameraView] where !view.isHidden {
             let side = model.scaled(9) + 4
             place(view, size: NSSize(width: side, height: side), centerY: firstLineCenter)
+            x += side + titleRowSpacing
+        }
+        if !mobileImageView.isHidden {
+            let side = model.scaled(9) + 4
+            place(mobileImageView, size: NSSize(width: side, height: side), centerY: firstLineCenter)
             x += side + titleRowSpacing
         }
         if !statusGlyphButton.isHidden {

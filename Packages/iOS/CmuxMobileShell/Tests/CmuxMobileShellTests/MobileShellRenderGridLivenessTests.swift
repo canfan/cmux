@@ -24,6 +24,30 @@ import Testing
 
 // MARK: - Tests
 
+@MainActor
+@Test func mobileSubscriptionReportsDeviceAndCurrentSelection() async throws {
+    let clock = TestClock()
+    let router = LivenessHostRouter()
+    let box = TransportBox()
+    let store = try await makeConnectedStore(router: router, box: box, clock: clock)
+
+    let reportedSelection = try await pollUntil {
+        await router.requests(for: "mobile.events.subscribe").contains {
+            $0.activeWorkspaceID == "live-workspace"
+                && $0.activeSurfaceID == "live-terminal"
+        }
+    }
+    #expect(reportedSelection)
+    let request = try #require(
+        await router.requests(for: "mobile.events.subscribe").last {
+            $0.activeWorkspaceID == "live-workspace"
+                && $0.activeSurfaceID == "live-terminal"
+        }
+    )
+    #expect(request.deviceID == store.localDeviceID)
+    #expect(request.deviceName == store.localDeviceName)
+}
+
 /// The decoupling found by the bisect: events that the transport delivers
 /// while the `mobile.events.subscribe` ack is still in flight must reach the
 /// real consumer (and therefore the liveness clock), not pile up unconsumed

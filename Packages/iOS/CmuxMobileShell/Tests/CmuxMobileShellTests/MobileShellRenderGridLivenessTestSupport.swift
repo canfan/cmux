@@ -22,6 +22,10 @@ actor LivenessHostRouter {
         var method: String?
         var topics: [String]?
         var workspaceID: String?
+        var deviceID: String?
+        var deviceName: String?
+        var activeWorkspaceID: String?
+        var activeSurfaceID: String?
         var streamID: String?
         var viewportColumns: Int?
         var viewportRows: Int?
@@ -122,6 +126,10 @@ actor LivenessHostRouter {
         method: String?,
         topics: [String]?,
         workspaceID: String? = nil,
+        deviceID: String? = nil,
+        deviceName: String? = nil,
+        activeWorkspaceID: String? = nil,
+        activeSurfaceID: String? = nil,
         streamID: String? = nil,
         viewportColumns: Int? = nil,
         viewportRows: Int? = nil,
@@ -137,6 +145,10 @@ actor LivenessHostRouter {
             method: method,
             topics: topics,
             workspaceID: workspaceID,
+            deviceID: deviceID,
+            deviceName: deviceName,
+            activeWorkspaceID: activeWorkspaceID,
+            activeSurfaceID: activeSurfaceID,
             streamID: streamID,
             viewportColumns: viewportColumns,
             viewportRows: viewportRows,
@@ -864,6 +876,10 @@ actor LivenessTransport: CmxByteTransport {
                 method: method,
                 topics: topics,
                 workspaceID: params?["workspace_id"] as? String,
+                deviceID: params?["device_id"] as? String,
+                deviceName: params?["device_name"] as? String,
+                activeWorkspaceID: params?["active_workspace_id"] as? String,
+                activeSurfaceID: params?["active_surface_id"] as? String,
                 streamID: streamID,
                 viewportColumns: (params?["viewport_columns"] as? NSNumber)?.intValue,
                 viewportRows: (params?["viewport_rows"] as? NSNumber)?.intValue,

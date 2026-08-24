@@ -231,6 +231,7 @@ struct MobileHostServiceStatus {
     let usesEphemeralFallback: Bool
     let routes: [CmxAttachRoute]
     let activeConnectionCount: Int
+    let localPairingDevice: MobileLocalPairingDeviceSnapshot?
     let lastErrorDescription: String?
 
     var payload: [String: Any] {
@@ -438,6 +439,7 @@ final class MobileHostService {
     private let routeResolver = MobileRouteResolver()
     private let ticketStore = MobileAttachTicketStore()
     private let localPairingAuthority = MobileLocalPairingAuthority()
+    private let localPairingStateStore = MobileLocalPairingStateStore()
     private var listener: NWListener?
     private var listenerGeneration = UUID()
     private var listenerUsesEphemeralFallback = false
@@ -1260,6 +1262,7 @@ final class MobileHostService {
             usesEphemeralFallback: isRunning && listenerUsesEphemeralFallback,
             routes: routes,
             activeConnectionCount: MobileHostConnectionRegistry.shared.count,
+            localPairingDevice: localPairingStateStore.snapshot,
             lastErrorDescription: lastErrorDescription
         )
     }
@@ -1417,10 +1420,10 @@ final class MobileHostService {
                 )
             },
             onAuthorizedRequest: { request in
-                guard let clientID = Self.clientID(from: request.params) else {
-                    return
-                }
-                await MobileHostService.shared.recordClientID(clientID, for: id)
+                await MobileHostService.shared.recordAuthorizedRequest(
+                    request,
+                    connectionID: id
+                )
             },
             onUsableSession: {
                 guard await promoteUsableSession() else { return false }
@@ -1592,10 +1595,17 @@ final class MobileHostService {
         let routes = MobileHostPublicStatusCache.snapshot().filter {
             $0.kind == .tailscale
         }
+        guard localPairingStateStore.snapshot == nil else {
+            throw MobileLocalPairingStateStoreError.alreadyPaired
+        }
+        let capability = try localPairingAuthority.issueCapability(for: routes)
+        guard localPairingStateStore.preparePairing(capability: capability) else {
+            throw MobileLocalPairingStateStoreError.alreadyPaired
+        }
         let build = MobileHostBuildIdentity.current()
         let ticket = try ticketStore.createLocalPairingTicket(
             routes: routes,
-            capability: try localPairingAuthority.issueCapability(for: routes),
+            capability: capability,
             macPairingCompatibilityVersion: CmxMobileDefaults.pairingCompatibilityVersion,
             macAppVersion: build.appVersion,
             macAppBuild: build.appBuild
@@ -1621,10 +1631,30 @@ final class MobileHostService {
               admission.admittedRoute(in: routes) != nil else {
             return false
         }
-        return localPairingAuthority.verifies(
-            request.auth?.attachToken,
-            for: routes
+        guard let capability = request.auth?.attachToken,
+              localPairingAuthority.verifies(capability, for: routes) else {
+            return false
+        }
+        return localPairingStateStore.authorize(capability: capability)
+    }
+
+    /// The durable phone owned by account-free pairing, including live
+    /// connection and navigation state for sidebar and pairing-window UI.
+    var localPairingDeviceSnapshot: MobileLocalPairingDeviceSnapshot? {
+        localPairingStateStore.snapshot
+    }
+
+    /// Revokes the owned phone and closes only transports that authenticated
+    /// with its local capability. Account/Iroh connections are untouched.
+    func forgetLocalPairingDevice() async {
+        let connectionIDs = localPairingStateStore.forget()
+        let connections = MobileHostConnectionRegistry.shared.removeConnections(
+            ids: connectionIDs
         )
+        NotificationCenter.default.post(name: .mobileHostStatusDidChange, object: nil)
+        for connection in connections {
+            await connection.close(reason: "local pairing forgotten")
+        }
     }
 
     private static func filteredRoutes(
@@ -1689,6 +1719,7 @@ final class MobileHostService {
     private func removeConnection(id: UUID) {
         MobileHostConnectionRegistry.shared.remove(id: id)
         activeConnections.removeValue(forKey: id)
+        localPairingStateStore.connectionClosed(id: id)
         // Drop this connection's sticky viewport reports so a disconnected
         // device stops pinning the shared grid (and its macOS viewport border
         // clears) even though it never sent an explicit clear.
@@ -1701,6 +1732,68 @@ final class MobileHostService {
             )
         }
         MobileHostRequestActivity.endConnection()
+        NotificationCenter.default.post(name: .mobileHostStatusDidChange, object: nil)
+    }
+
+    private func recordAuthorizedRequest(
+        _ request: MobileHostRPCRequest,
+        connectionID: UUID
+    ) {
+        let clientID = Self.clientID(from: request.params)
+        if let clientID {
+            recordClientID(clientID, for: connectionID)
+        }
+        // Presence is part of the subscription handshake. Waiting for that
+        // request ensures a new client can report its explicit device id before
+        // an earlier bootstrap RPC accidentally pins the legacy client id.
+        guard request.method == "mobile.events.subscribe" else { return }
+        let routes = MobileHostPublicStatusCache.snapshot().filter {
+            $0.kind == .tailscale
+        }
+        guard let capability = request.auth?.attachToken,
+              localPairingAuthority.verifies(capability, for: routes) else {
+            return
+        }
+        let deviceID = Self.nonemptyString(
+            request.params["device_id"] as? String
+        ) ?? clientID
+        let displayName = Self.nonemptyString(
+            request.params["device_name"] as? String
+        )
+        let previousSnapshot = localPairingStateStore.snapshot
+        let workspaceKeys = ["active_workspace_id", "workspace_id"]
+        let surfaceKeys = [
+            "active_surface_id", "surface_id", "terminal_id", "tab_id",
+        ]
+        let workspaceID = workspaceKeys.first(where: request.params.keys.contains)
+            .map { Self.uuid(request.params[$0]) }
+            ?? previousSnapshot?.activeWorkspaceID
+        let surfaceID = surfaceKeys.first(where: request.params.keys.contains)
+            .map { Self.uuid(request.params[$0]) }
+            ?? previousSnapshot?.activeSurfaceID
+        guard localPairingStateStore.recordAuthorizedConnection(
+            id: connectionID,
+            capability: capability,
+            deviceID: deviceID,
+            displayName: displayName,
+            activeWorkspaceID: workspaceID,
+            activeSurfaceID: surfaceID
+        ) else {
+            return
+        }
+        if localPairingStateStore.snapshot != previousSnapshot {
+            NotificationCenter.default.post(name: .mobileHostStatusDidChange, object: nil)
+        }
+    }
+
+    private nonisolated static func nonemptyString(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed?.isEmpty == false ? trimmed : nil
+    }
+
+    private nonisolated static func uuid(_ value: Any?) -> UUID? {
+        guard let raw = nonemptyString(value as? String) else { return nil }
+        return UUID(uuidString: raw)
     }
 
     /// The registry is lock-protected and connection close is actor-isolated,

@@ -183,6 +183,23 @@ struct MobileHostIdentityTests {
         #expect(payload["mac_compatible_mac_tags"] as? [String] == ["hello", "irply"])
     }
 
+    @Test func authenticatedStatusIncludesTailscaleDNSIdentityWithoutChangingRoutes() throws {
+        let route = try CmxAttachRoute(
+            id: "tailscale",
+            kind: .tailscale,
+            endpoint: .hostPort(host: "100.64.0.5", port: 58_465)
+        )
+        let payload = MobileHostService.identityStatusPayload(
+            routes: [route],
+            tailscaleDNSName: "test-mac.tailnet.ts.net."
+        )
+
+        #expect(payload["mac_tailscale_dns_name"] as? String == "test-mac.tailnet.ts.net")
+        let routes = try #require(payload["routes"] as? [[String: Any]])
+        let endpoint = try #require(routes.first?["endpoint"] as? [String: Any])
+        #expect(endpoint["host"] as? String == "100.64.0.5")
+    }
+
     @Test func publicStatusOmitsInstanceTag() {
         let payload = MobileHostService.publicStatusPayload(routes: [])
         #expect(payload["mac_instance_tag"] == nil)

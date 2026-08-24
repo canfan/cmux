@@ -356,6 +356,26 @@ import Testing
         #expect(snapshots.macPickerMachines.map(\.name) == ["Air", "Air", "Studio"])
     }
 
+    @Test func connectedHostNameReplacesThePlaceholderBeforePersistenceReloads() {
+        let paired = pairedMac(
+            deviceID: "mac-a",
+            name: "",
+            instanceTag: "local-tailpair",
+            isActive: true
+        )
+        let snapshots = WorkspaceMachineSnapshots(
+            workspaces: [],
+            macPickerMachineIDs: [paired.id],
+            namesByID: [:],
+            fallbackName: "Computer",
+            foregroundMacDeviceID: paired.macDeviceID,
+            foregroundInstanceTag: paired.instanceTag,
+            connectedHostName: "test-mac"
+        )
+
+        #expect(snapshots.macPickerMachines.map(\.name) == ["test-mac"])
+    }
+
     private func machineSnapshots(workspaces: [MobileWorkspacePreview]) -> WorkspaceMachineSnapshots {
         var namesByID: [String: String] = [:]
         for workspace in workspaces {

@@ -5380,6 +5380,19 @@ import Testing
         #expect(shell.connections["mac-late"]?.client === client)
     }
 
+    @Test func localPairingPrefersTheAuthenticatedTailscaleNodeName() {
+        #expect(MobileLocalPairingHostDisplayName.resolve(
+            macDisplayName: "Test Mac",
+            tailscaleDNSName: "test-mac.tailnet.ts.net.",
+            isLocalPairing: true
+        ) == "test-mac")
+        #expect(MobileLocalPairingHostDisplayName.resolve(
+            macDisplayName: "Test Mac",
+            tailscaleDNSName: "test-mac.tailnet.ts.net.",
+            isLocalPairing: false
+        ) == "Test Mac")
+    }
+
     @Test func officialBuildAdoptsUntagged06417OnlyFromAuthorizedTailscale() async throws {
         let router = LivenessHostRouter()
         let runtime = LivenessTestRuntime(

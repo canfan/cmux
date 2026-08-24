@@ -24,6 +24,24 @@ import Testing
         #expect(!record.isLocalDevice)
     }
 
+    @Test func resolvesPeerIdentityFromAnAdmittedNumericAddress() throws {
+        let record = try resolver.resolve(
+            peerAddress: "100.64.0.5",
+            statusJSON: statusJSON(peers: [
+                peer(
+                    id: "node-phone",
+                    dnsName: "test-iphone.tailnet.ts.net.",
+                    addresses: ["100.64.0.5", "fd7a:115c:a1e0::5"]
+                ),
+            ])
+        )
+
+        #expect(record.stableID == "node-phone")
+        #expect(record.dnsName == "test-iphone.tailnet.ts.net")
+        #expect(record.displayName == "test-iphone")
+        #expect(record.preferredAddress.value == "100.64.0.5")
+    }
+
     @Test func resolvesIPv6OnlyPeerWithoutFallingBackToGenericPrivateNetworking() throws {
         let record = try resolver.resolve(
             magicDNSName: "work-mac.tailnet.ts.net",

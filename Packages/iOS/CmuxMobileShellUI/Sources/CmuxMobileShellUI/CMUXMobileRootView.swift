@@ -1381,7 +1381,8 @@ struct CMUXMobileRootView: View {
               !didAuthenticateWithAttachTicket,
               store.connectionState != .connected,
               let attachURL = await localPairingCredentialStore.loadAttachURL(),
-              isLocalPairingURL(attachURL) else { return }
+              isLocalPairingURL(attachURL),
+              store.restorePersistedLocalPairingAuthority(from: attachURL) else { return }
         connectAttachURL(attachURL)
     }
 

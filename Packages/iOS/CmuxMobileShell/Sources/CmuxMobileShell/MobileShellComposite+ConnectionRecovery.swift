@@ -915,6 +915,26 @@ extension MobileShellComposite {
         return ticket
     }
 
+    /// Restores previously verified local-pairing authority before its first
+    /// cold-launch dial. Callers must supply the value loaded from the secure
+    /// local-pairing credential store; fresh QR input still becomes durable
+    /// only after a successful connection.
+    @discardableResult
+    public func restorePersistedLocalPairingAuthority(
+        from rawValue: String
+    ) -> Bool {
+        let rawURL = Self.normalizedPairingURL(rawValue)
+        guard let decoded = try? CmxAttachTicketInput.decode(rawURL),
+              let ticket = Self.validatedLocalPairingRecoveryTicket(decoded) else {
+            return false
+        }
+        if localPairingRecoveryTicket != ticket {
+            clearAutomaticReconnectBackoff()
+        }
+        localPairingRecoveryTicket = ticket
+        return true
+    }
+
     /// Stable process-local identity for whichever durable authority owns
     /// reconnects. Stack sessions use their account id; account-free local
     /// pairing uses the paired Mac id so the same bounded backoff loop can

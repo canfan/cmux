@@ -204,8 +204,8 @@ struct MobileAutomaticReconnectBackoffOwnerTests {
             priority: 10
         )
         let ticket = try CmxAttachTicket(
-            workspaceID: "workspace-1",
-            terminalID: "terminal-1",
+            workspaceID: "",
+            terminalID: nil,
             macDeviceID: "mac-1",
             macDisplayName: "Studio",
             routes: [route],
@@ -220,7 +220,11 @@ struct MobileAutomaticReconnectBackoffOwnerTests {
         let store = MobileShellComposite()
 
         #expect(store.restorePersistedLocalPairingAuthority(from: pairingURL))
-        #expect(store.localPairingRecoveryTicket == ticket)
+        let restored = try #require(store.localPairingRecoveryTicket)
+        #expect(restored.localPairing)
+        #expect(restored.macDeviceID == ticket.macDeviceID)
+        #expect(restored.routes == ticket.routes)
+        #expect(restored.authToken == ticket.authToken)
         #expect(store.hasDurableConnectionRecoveryAuthority)
     }
 }

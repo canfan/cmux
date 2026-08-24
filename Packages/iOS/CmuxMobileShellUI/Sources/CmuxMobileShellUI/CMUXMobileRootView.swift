@@ -1046,12 +1046,14 @@ struct CMUXMobileRootView: View {
     private func reconnectStoredMacIfNeeded() {
         guard isAuthenticated,
               didFinishAuthBootstrap,
-              !authManager.isRestoringSession else { return }
+              !authManager.isRestoringSession,
+              openURLTask == nil else { return }
         let startedUITestAttachURL = connectUITestAttachURLIfNeeded()
         guard !startedUITestAttachURL,
               MobileRootAuthGate.shouldReconnectStoredMac(
                 stackAuthenticated: authManager.isAuthenticated,
                 attachTicketAuthenticated: hasActiveAttachTicketAuthentication,
+                durableLocalPairingAuthenticated: hasPersistentLocalPairingAuthentication,
                 didFinishAuthBootstrap: didFinishAuthBootstrap,
                 isRestoringSession: authManager.isRestoringSession,
                 connectionState: store.connectionState
@@ -1259,25 +1261,26 @@ struct CMUXMobileRootView: View {
             if result.didConnect, isLocalPairingURL(rawURL) {
                 await localPairingCredentialStore.saveAttachURL(rawURL)
             }
+            let shouldReconnectAfterCompletion: Bool
             switch followUp {
             case .none:
-                break
+                shouldReconnectAfterCompletion = false
             case .finishAttachTicketAuthentication:
                 if result == .needsUserApproval {
                     showAttachVersionApproval()
                 }
                 clearAttachTicketAuthentication(after: result)
-                if result == .failed, store.connectionState != .connected {
-                    reconnectStoredMacIfNeeded()
-                }
+                shouldReconnectAfterCompletion =
+                    result == .failed && store.connectionState != .connected
             case .reconnectIfDisconnected:
-                if store.connectionState != .connected {
-                    reconnectStoredMacIfNeeded()
-                }
+                shouldReconnectAfterCompletion = store.connectionState != .connected
             }
             guard openURLTaskToken == token else { return }
             openURLTask = nil
             openURLTaskToken = nil
+            if shouldReconnectAfterCompletion {
+                reconnectStoredMacIfNeeded()
+            }
         }
     }
 

@@ -93,6 +93,7 @@ public struct MobileRootAuthGate {
     /// - Parameters:
     ///   - stackAuthenticated: Whether Stack auth is established.
     ///   - attachTicketAuthenticated: Whether a temporary attach ticket grants access.
+    ///   - durableLocalPairingAuthenticated: Whether a persisted local-pairing capability grants access across disconnects.
     ///   - didFinishAuthBootstrap: Whether launch auth, including team resolution, completed.
     ///   - isRestoringSession: Whether cached auth is still being validated or recreated.
     ///   - connectionState: The current connection state.
@@ -100,14 +101,18 @@ public struct MobileRootAuthGate {
     public static func shouldReconnectStoredMac(
         stackAuthenticated: Bool,
         attachTicketAuthenticated: Bool,
+        durableLocalPairingAuthenticated: Bool = false,
         didFinishAuthBootstrap: Bool,
         isRestoringSession: Bool,
         connectionState: MobileConnectionState
     ) -> Bool {
-        stackAuthenticated
+        let hasReconnectAuthentication = stackAuthenticated || durableLocalPairingAuthenticated
+        let hasTemporaryAttachAuthentication =
+            attachTicketAuthenticated && !durableLocalPairingAuthenticated
+        return hasReconnectAuthentication
             && didFinishAuthBootstrap
             && !isRestoringSession
-            && !attachTicketAuthenticated
+            && !hasTemporaryAttachAuthentication
             && connectionState != .connected
     }
 

@@ -111,6 +111,10 @@ struct SettingCatalogTests {
         #expect(SettingCatalog().terminal.adaptiveDefaultTheme.defaultValue)
     }
 
+    @Test func phonePushForwardingRequiresExplicitOptIn() {
+        #expect(!SettingCatalog().mobile.phonePushForwarding.defaultValue)
+    }
+
     @Test func keyIdsMatchTheirSectionPrefix() {
         // Each key's dotted id must start with its section's prefix; this is
         // the convention that lets the JSON store use `id` as the JSON path.

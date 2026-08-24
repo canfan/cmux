@@ -371,11 +371,11 @@ import Testing
         body(defaults)
     }
 
-    @Test func absentPreferencesDefaultToEnabledAlwaysWithVisibleContent() throws {
+    @Test func absentPreferencesDefaultToDisabledAlwaysWithVisibleContent() throws {
         try withScratchDefaults { defaults in
             let configuration = PhonePushConfiguration(defaults: defaults)
 
-            #expect(configuration.forwardingEnabled)
+            #expect(!configuration.forwardingEnabled)
             #expect(configuration.mode == .always)
             #expect(!configuration.hideContent)
         }

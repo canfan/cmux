@@ -133,6 +133,15 @@ import Testing
         #expect(!MobileRootAuthGate.shouldReconnectStoredMac(
             stackAuthenticated: false,
             attachTicketAuthenticated: true,
+            durableLocalPairingAuthenticated: false,
+            didFinishAuthBootstrap: true,
+            isRestoringSession: false,
+            connectionState: .disconnected
+        ))
+        #expect(MobileRootAuthGate.shouldReconnectStoredMac(
+            stackAuthenticated: false,
+            attachTicketAuthenticated: true,
+            durableLocalPairingAuthenticated: true,
             didFinishAuthBootstrap: true,
             isRestoringSession: false,
             connectionState: .disconnected

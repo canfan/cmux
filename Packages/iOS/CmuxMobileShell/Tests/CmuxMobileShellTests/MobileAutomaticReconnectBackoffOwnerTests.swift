@@ -1,3 +1,4 @@
+import CMUXMobileCore
 import Foundation
 import Testing
 @testable import CmuxMobileShell
@@ -153,5 +154,43 @@ struct MobileAutomaticReconnectBackoffOwnerTests {
 
         #expect(store.automaticReconnectBackoffOwner.transientRetryAt == nil)
         store.connectionRecoveryOwner.cancel()
+    }
+
+    @MainActor
+    @Test
+    func accountFreeLocalPairingFailureSchedulesAutomaticRetry() throws {
+        let suiteName = "local-pairing-backoff-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let route = try CmxAttachRoute(
+            id: "tailscale",
+            kind: .tailscale,
+            endpoint: .hostPort(host: "100.64.0.5", port: 58465),
+            priority: 10
+        )
+        let ticket = try CmxAttachTicket(
+            workspaceID: "workspace-1",
+            terminalID: "terminal-1",
+            macDeviceID: "mac-1",
+            macDisplayName: "Studio",
+            routes: [route],
+            authToken: "local-capability",
+            localPairing: true
+        )
+        let store = MobileShellComposite(
+            isSignedIn: false,
+            reachability: AlwaysOnlineReachability(),
+            pairingHintDefaults: defaults
+        )
+        store.localPairingRecoveryTicket = ticket
+
+        store.armAutomaticReconnectRetryAfterFailedAttempt(
+            failure: .connectionRefused,
+            stackUserID: nil
+        )
+
+        #expect(store.automaticReconnectBackoffOwner.transientFailureCount == 1)
+        #expect(store.automaticReconnectRetryTask != nil)
+        store.clearAutomaticReconnectBackoff()
     }
 }

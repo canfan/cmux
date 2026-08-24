@@ -136,7 +136,8 @@ private let tailscaleInterface = CmxNetworkInterfaceIdentity(name: "utun4", inde
                 localAddress: nil,
                 remoteAddress: CmxTailscaleIPAddress("100.71.210.41"),
                 remotePort: 58_465
-            )
+            ),
+            phase: .established
         )
     }
 
@@ -181,7 +182,8 @@ private let tailscaleInterface = CmxNetworkInterfaceIdentity(name: "utun4", inde
                     localAddress: CmxTailscaleIPAddress("100.64.0.6"),
                     remoteAddress: CmxTailscaleIPAddress("100.71.210.41"),
                     remotePort: 58_465
-                )
+                ),
+                phase: .established
             )
         }
         #expect(throws: CmxTailscaleRouteProofError.remoteEndpointMismatch) {
@@ -206,9 +208,9 @@ private let tailscaleInterface = CmxNetworkInterfaceIdentity(name: "utun4", inde
     /// first path update before the socket binds a local endpoint, so a
     /// still-connecting path carries the proven interface but no endpoints.
     /// That update must pass route-level validation instead of misreading the
-    /// unbound endpoints as a substitution and killing the dial; the same
-    /// path must still fail the established phase, where endpoints are
-    /// mandatory.
+    /// unbound endpoints as a substitution and killing the dial. A physical
+    /// device can continue omitting only its local endpoint after the socket
+    /// is established, while the proven remote endpoint remains mandatory.
     @Test func preEstablishmentPathUpdateValidatesRouteFactsOnly() throws {
         let request = try tailscaleRequest(host: "100.71.210.41")
         let snapshot = authoritySnapshot(generation: 41)
@@ -230,14 +232,12 @@ private let tailscaleInterface = CmxNetworkInterfaceIdentity(name: "utun4", inde
             connectionPath: stillConnecting,
             phase: .pathUpdate
         )
-        #expect(throws: CmxTailscaleRouteProofError.localEndpointMismatch) {
-            try CmxTailscaleRouteProofValidator().validate(
-                proof: proof,
-                authoritySnapshot: snapshot,
-                connectionPath: stillConnecting,
-                phase: .established
-            )
-        }
+        try CmxTailscaleRouteProofValidator().validate(
+            proof: proof,
+            authoritySnapshot: snapshot,
+            connectionPath: stillConnecting,
+            phase: .established
+        )
 
         // Route-level facts still gate the path-update phase: a path that
         // lost the proven interface fails even while connecting.

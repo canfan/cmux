@@ -18,11 +18,35 @@ struct MobileLocalPairingAuthority: Sendable {
         } else {
             audience = "com.cmuxterm.app"
         }
+        let secret: Data
+        #if DEBUG
+        if let tag = ProcessInfo.processInfo.environment["CMUX_TAG"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !tag.isEmpty,
+            let applicationSupport = FileManager.default.urls(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask
+            ).first {
+            let fileURL = applicationSupport
+                .appendingPathComponent("cmux", isDirectory: true)
+                .appendingPathComponent("mobile-local-pairing", isDirectory: true)
+                .appendingPathComponent("\(audience).secret", isDirectory: false)
+            secret = SocketClientCapabilityFileSecretStore(fileURL: fileURL)
+                .loadOrCreateSecret()
+        } else {
+            let store = SocketClientCapabilitySecretStore(
+                service: "\(audience).mobile-local-pairing-capability.v1"
+            )
+            secret = store.loadOrCreateSecret()
+        }
+        #else
         let store = SocketClientCapabilitySecretStore(
             service: "\(audience).mobile-local-pairing-capability.v1"
         )
+        secret = store.loadOrCreateSecret()
+        #endif
         authority = SocketClientCapabilityAuthority(
-            secret: store.loadOrCreateSecret(),
+            secret: secret,
             audience: "\(audience).mobile-local-pairing"
         )
     }

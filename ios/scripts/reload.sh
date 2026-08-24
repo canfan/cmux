@@ -3,12 +3,15 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: ios/scripts/reload.sh --tag <tag> [--simulator <name>] [--simulator-id <id>] [--no-launch]
+Usage: ios/scripts/reload.sh --tag <tag> [--display-name <name>] [--simulator <name>] [--simulator-id <id>] [--no-launch]
        ios/scripts/reload.sh --tag <tag> --device [--device-id <id>] [--device-name <name>] [--team <team-id>] [--no-launch]
        ios/scripts/reload.sh --tag <tag> --device-only [--device-id <id>] [--device-name <name>] [--team <team-id>] [--no-launch]
        ios/scripts/reload.sh --tag <tag> --simulator-only
 
 Build, install, and launch the cmux iOS app with an isolated tag.
+
+Use --display-name to change the visible app name without changing the tag,
+bundle identifier, isolated Simulator, or persisted pairing credentials.
 
 Verification default is simulator + iPhone: when a default iPhone is configured
 (CMUX_IPHONE_DEVICE_ID or ~/.config/cmux/iphone-device-id), the device leg is
@@ -64,6 +67,7 @@ require_option_value() {
 }
 
 TAG=""
+DISPLAY_NAME_OVERRIDE=""
 SIMULATOR_NAME="${IOS_SIMULATOR_NAME:-iPhone 17}"
 SIMULATOR_ID="${IOS_SIMULATOR_ID:-}"
 # Track whether the caller picked a simulator explicitly (flag or env); when
@@ -104,6 +108,11 @@ while [[ $# -gt 0 ]]; do
     --tag)
       require_option_value "$1" "${2:-}"
       TAG="${2:-}"
+      shift 2
+      ;;
+    --display-name)
+      require_option_value "$1" "${2:-}"
+      DISPLAY_NAME_OVERRIDE="${2:-}"
       shift 2
       ;;
     --simulator)
@@ -327,7 +336,10 @@ fi
 WORKSPACE="$IOS_DIR/cmux.xcworkspace"
 SCHEME="cmux-ios"
 TAG_SLUG="$(sanitize_tag "$TAG")"
-DISPLAY_NAME="cmux DEV $TAG"
+DISPLAY_NAME="$DISPLAY_NAME_OVERRIDE"
+if [[ -z "$DISPLAY_NAME" ]]; then
+  DISPLAY_NAME="cmux DEV $TAG"
+fi
 BUNDLE_ID="dev.cmux.ios.$TAG_SLUG"
 DERIVED_DATA="$HOME/Library/Developer/Xcode/DerivedData/cmux-ios-$TAG_SLUG"
 QUEUE_SCRIPT="$IOS_DIR/../scripts/iphone-install-queue.sh"

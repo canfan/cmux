@@ -8,6 +8,7 @@ source "$SCRIPT_DIR/lib/mobile-attach.sh"
 source "$SCRIPT_DIR/lib/dev-secrets.sh"
 
 APP_NAME="cmux DEV"
+APP_DISPLAY_NAME=""
 BUNDLE_ID="com.cmuxterm.app.debug"
 BASE_APP_NAME="cmux DEV"
 DERIVED_DATA=""
@@ -889,6 +890,7 @@ Options:
                          Fail before building unless the selected profile/file
                          resolves to this normalized account.
   --name <app name>      Override app display/bundle name.
+  --display-name <name>  Override the visible app name without changing tag isolation.
   --bundle-id <id>       Override bundle identifier.
   --derived-data <path>  Override derived data path.
   --no-global-cli-links  Do not update /tmp/cmux-cli, /tmp/cmux-last-cli-path,
@@ -1108,6 +1110,14 @@ while [[ $# -gt 0 ]]; do
       NAME_SET=1
       shift 2
       ;;
+    --display-name)
+      APP_DISPLAY_NAME="${2:-}"
+      if [[ -z "$APP_DISPLAY_NAME" ]]; then
+        echo "error: --display-name requires a value" >&2
+        exit 1
+      fi
+      shift 2
+      ;;
     --bundle-id)
       BUNDLE_ID="${2:-}"
       if [[ -z "$BUNDLE_ID" ]]; then
@@ -1222,6 +1232,9 @@ if [[ -n "$TAG" ]]; then
   cleanup_stale_cli_pointer_target || true
   cleanup_stale_tag_state "$TAG_SLUG" || true
 fi
+if [[ -z "$APP_DISPLAY_NAME" ]]; then
+  APP_DISPLAY_NAME="$APP_NAME"
+fi
 
 CMUX_DEV_PORT="$(choose_cmux_dev_port)"
 CMUX_DEV_PORT_RANGE="$(choose_cmux_dev_port_range)"
@@ -1251,6 +1264,7 @@ XCODEBUILD_SOURCE_APP_PATH=""
 XCODEBUILD_TAG_APP_PATH=""
 TAG_APP_FINAL_PATH=""
 TAG_APP_STAGING_PATH=""
+TAG_COMPAT_APP_PATH=""
 if [[ -n "$DERIVED_DATA" ]]; then
   BUILD_PRODUCTS_DEBUG_DIR="${DERIVED_DATA}/Build/Products/Debug"
   if [[ -n "$TAG" ]]; then
@@ -1375,8 +1389,8 @@ if [[ "${CMUX_DISABLE_AUTOMATIC_PACKAGE_RESOLUTION:-}" == "1" ]]; then
 fi
 if [[ -z "$TAG" ]]; then
   XCODEBUILD_ARGS+=(
-    INFOPLIST_KEY_CFBundleName="$APP_NAME"
-    INFOPLIST_KEY_CFBundleDisplayName="$APP_NAME"
+    INFOPLIST_KEY_CFBundleName="$APP_DISPLAY_NAME"
+    INFOPLIST_KEY_CFBundleDisplayName="$APP_DISPLAY_NAME"
   )
 fi
 XCODEBUILD_ARGS+=(PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID")
@@ -1630,17 +1644,17 @@ if [[ -n "${TAG_SLUG:-}" ]]; then
   fi
 fi
 
-if [[ -n "$TAG" && "$APP_NAME" != "$SEARCH_APP_NAME" ]]; then
+if [[ -n "$TAG" ]]; then
   TAG_APP_FINAL_PATH="$(dirname "$APP_PATH")/${APP_NAME}.app"
   TAG_APP_STAGING_PATH="$(dirname "$APP_PATH")/.${APP_NAME}.reload-$$.app"
   rm -rf "$TAG_APP_STAGING_PATH"
   cp -R "$APP_PATH" "$TAG_APP_STAGING_PATH"
   INFO_PLIST="$TAG_APP_STAGING_PATH/Contents/Info.plist"
   if [[ -f "$INFO_PLIST" ]]; then
-    /usr/libexec/PlistBuddy -c "Set :CFBundleName $APP_NAME" "$INFO_PLIST" 2>/dev/null \
-      || /usr/libexec/PlistBuddy -c "Add :CFBundleName string $APP_NAME" "$INFO_PLIST"
-    /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $APP_NAME" "$INFO_PLIST" 2>/dev/null \
-      || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string $APP_NAME" "$INFO_PLIST"
+    /usr/libexec/PlistBuddy -c "Set :CFBundleName $APP_DISPLAY_NAME" "$INFO_PLIST" 2>/dev/null \
+      || /usr/libexec/PlistBuddy -c "Add :CFBundleName string $APP_DISPLAY_NAME" "$INFO_PLIST"
+    /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $APP_DISPLAY_NAME" "$INFO_PLIST" 2>/dev/null \
+      || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string $APP_DISPLAY_NAME" "$INFO_PLIST"
     /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" "$INFO_PLIST" 2>/dev/null \
       || /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string $BUNDLE_ID" "$INFO_PLIST"
     if [[ -n "${TAG_SLUG:-}" ]]; then
@@ -1751,6 +1765,11 @@ if [[ -n "${TAG_APP_FINAL_PATH:-}" && -n "${TAG_APP_STAGING_PATH:-}" ]]; then
   rm -rf "$TAG_APP_FINAL_PATH"
   mv "$TAG_APP_STAGING_PATH" "$TAG_APP_FINAL_PATH"
   APP_PATH="$TAG_APP_FINAL_PATH"
+  TAG_COMPAT_APP_PATH="$(dirname "$APP_PATH")/${BASE_APP_NAME} ${TAG_SLUG}.app"
+  if [[ "$TAG_COMPAT_APP_PATH" != "$APP_PATH" ]]; then
+    rm -rf "$TAG_COMPAT_APP_PATH"
+    ln -s "$APP_PATH" "$TAG_COMPAT_APP_PATH"
+  fi
 fi
 CLI_PATH="$APP_PATH/Contents/Resources/bin/cmux"
 
@@ -1768,7 +1787,7 @@ fi
 if [[ -n "$TAG" ]]; then
   /usr/bin/osascript -e "tell application id \"${BUNDLE_ID}\" to quit" >/dev/null 2>&1 || true
   sleep 0.3
-  pkill -f "${APP_NAME}.app/Contents/MacOS/${BASE_APP_NAME}" || true
+  pkill -f "${APP_PATH}/Contents/MacOS/${BASE_APP_NAME}" || true
   sleep 0.3
   # Tagged --launch runs are handed off to launchd so they survive the terminal or
   # automation process that invoked reload.sh. Remove a still-registered prior job

@@ -193,4 +193,34 @@ struct MobileAutomaticReconnectBackoffOwnerTests {
         #expect(store.automaticReconnectRetryTask != nil)
         store.clearAutomaticReconnectBackoff()
     }
+
+    @MainActor
+    @Test
+    func persistedLocalPairingRestoresRecoveryAuthorityBeforeDial() throws {
+        let route = try CmxAttachRoute(
+            id: "tailscale",
+            kind: .tailscale,
+            endpoint: .hostPort(host: "100.64.0.5", port: 58465),
+            priority: 10
+        )
+        let ticket = try CmxAttachTicket(
+            workspaceID: "workspace-1",
+            terminalID: "terminal-1",
+            macDeviceID: "mac-1",
+            macDisplayName: "Studio",
+            routes: [route],
+            authToken: "local-capability",
+            localPairing: true
+        )
+        let pairingURL = try #require(CmxPairingQRCode().encode(
+            ticket,
+            routeDisclosureMode: .localTailscalePairing,
+            pairingURLScheme: CmxPairingURLScheme(rawValue: CmxPairingURLScheme.release)
+        ))
+        let store = MobileShellComposite()
+
+        #expect(store.restorePersistedLocalPairingAuthority(from: pairingURL))
+        #expect(store.localPairingRecoveryTicket == ticket)
+        #expect(store.hasDurableConnectionRecoveryAuthority)
+    }
 }

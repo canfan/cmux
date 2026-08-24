@@ -3036,6 +3036,9 @@ public final class MobileShellComposite: MobileTerminalOutputSinking {
         }
         if let outcome = race.value {
             if outcome.didConnect {
+                if let accountID = automaticReconnectScopeID {
+                    clearAutomaticReconnectBackoff(accountID: accountID)
+                }
                 // Start secondary dials only after the bounded foreground
                 // operation has handed ownership back to this shared entry.
                 // This preserves foreground-first ordering even though the
@@ -3057,7 +3060,7 @@ public final class MobileShellComposite: MobileTerminalOutputSinking {
         if Self.shouldRecordReconnectBackoff(
             abandonedDialCount: abandonedReconnectDialCount
         ),
-           let accountID = stackUserID ?? identityProvider?.currentUserID {
+           let accountID = stackUserID ?? automaticReconnectScopeID {
             recordTransientAutomaticReconnectBackoff(accountID: accountID)
         }
         return .failed(.timedOut)

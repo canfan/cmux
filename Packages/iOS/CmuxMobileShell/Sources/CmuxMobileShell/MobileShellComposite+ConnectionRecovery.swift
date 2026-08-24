@@ -109,7 +109,7 @@ extension MobileShellComposite {
                 return
             }
         }
-        if let accountID = identityProvider?.currentUserID {
+        if let accountID = automaticReconnectScopeID {
             switch trigger {
             case .manual, .networkChange, .foreground, .connectionMethodChanged:
                 clearTransientAutomaticReconnectBackoff(accountID: accountID)
@@ -915,6 +915,19 @@ extension MobileShellComposite {
         return ticket
     }
 
+    /// Stable process-local identity for whichever durable authority owns
+    /// reconnects. Stack sessions use their account id; account-free local
+    /// pairing uses the paired Mac id so the same bounded backoff loop can
+    /// survive a briefly unavailable Mac listener without requiring sign-in.
+    var automaticReconnectScopeID: String? {
+        if let ticket = localPairingRecoveryTicket,
+           Self.validatedLocalPairingRecoveryTicket(ticket) != nil {
+            return "local-pairing:\(ticket.macDeviceID)"
+        }
+        guard isSignedIn else { return nil }
+        return identityProvider?.currentUserID
+    }
+
     func automaticIrohReconnectIsBlocked(accountID: String) -> Bool {
         automaticReconnectBackoffOwner.isBlocked(
             accountID: accountID,
@@ -946,11 +959,11 @@ extension MobileShellComposite {
         guard failure != .authorizationFailed,
               failure != .accountMismatch,
               !connectionRequiresReauth else { return }
-        guard isSignedIn, connectionState != .connected else { return }
+        guard connectionState != .connected else { return }
         guard Self.shouldRecordReconnectBackoff(
             abandonedDialCount: abandonedReconnectDialCount
         ) else { return }
-        guard let accountID = stackUserID ?? identityProvider?.currentUserID else {
+        guard let accountID = stackUserID ?? automaticReconnectScopeID else {
             return
         }
         recordTransientAutomaticReconnectBackoff(accountID: accountID)
@@ -1009,14 +1022,14 @@ extension MobileShellComposite {
             }
             guard let self,
                   !Task.isCancelled,
-                  self.identityProvider?.currentUserID == accountID,
+                  self.automaticReconnectScopeID == accountID,
                   self.automaticReconnectBackoffOwner.accountID == accountID,
                   self.automaticReconnectRetryAccountID == accountID,
                   self.automaticReconnectRetryAt == retryAt else { return }
             self.automaticReconnectRetryTask = nil
             self.automaticReconnectRetryAccountID = nil
             self.automaticReconnectRetryAt = nil
-            guard self.isSignedIn, self.connectionState != .connected else { return }
+            guard self.connectionState != .connected else { return }
             let currentNow = self.runtime?.now() ?? Date()
             if self.automaticReconnectBackoffOwner.isBlocked(
                 accountID: accountID,
@@ -1271,7 +1284,8 @@ extension MobileShellComposite {
             // mid-manual-retry and re-block the dial the user just requested
             // (manual retries clear backoff on entry). Skip when any attempt
             // or scheduled retry is already active.
-            guard self.isSignedIn, self.connectionState != .connected,
+            guard self.automaticReconnectScopeID != nil,
+                  self.connectionState != .connected,
                   !self.connectionRecoveryOwner.isRedialingOrValidating,
                   self.automaticReconnectRetryTask == nil else { return }
             self.recoverMobileConnection(trigger: .automaticBackoffExpired)

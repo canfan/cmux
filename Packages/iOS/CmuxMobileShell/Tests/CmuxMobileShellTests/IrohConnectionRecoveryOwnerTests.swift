@@ -1,6 +1,7 @@
 import CMUXMobileCore
 import CmuxMobilePairedMac
 import CmuxMobileRPC
+import CmuxMobileShellModel
 import Foundation
 import Testing
 @testable import CmuxMobileShell
@@ -46,6 +47,51 @@ extension ReconnectRouteSelectionTests {
         let attemptedKinds = fixture.factory.attemptedKinds()
         #expect(attemptedKinds.count > initialAttemptCount)
         #expect(attemptedKinds.allSatisfy { $0 == .tailscale })
+    }
+
+    @Test func localTailscaleRecoveryRetriesAfterMacListenerStartupRace() async throws {
+        let fixture = makeLocalTailscaleRecoveryOwnerFixture()
+        defer { fixture.release() }
+
+        let ticket = try CmxAttachTicket(
+            workspaceID: "",
+            terminalID: nil,
+            macDeviceID: "test-mac",
+            macDisplayName: "Test Mac",
+            macPairingCompatibilityVersion: 1,
+            routes: [try tailscale()],
+            authToken: "v2.local-route-bound-capability",
+            localPairing: true
+        )
+        let pairingURL = try #require(CmxPairingQRCode().encode(
+            ticket,
+            routeDisclosureMode: .localTailscalePairing,
+            pairingURLScheme: CmxPairingURLScheme(rawValue: CmxPairingURLScheme.release)
+        ))
+
+        #expect(await fixture.store.connectPairingURLResult(pairingURL) == .connected)
+        #expect(await fixture.router.waitForCount(of: "mobile.events.subscribe", atLeast: 1))
+        let initialAttemptCount = fixture.factory.attemptedKinds().count
+        fixture.store.disconnectLiveConnection()
+        #expect(fixture.store.connectionState == .disconnected)
+
+        fixture.store.armAutomaticReconnectRetryAfterFailedAttempt(
+            failure: .connectionRefused,
+            stackUserID: nil
+        )
+        fixture.clock.advance(by: 3)
+
+        #expect(await fixture.factory.waitForAttemptCount(
+            initialAttemptCount + 1,
+            timeout: .seconds(5)
+        ))
+        #expect(try await pollUntil(attempts: 500) {
+            let subscribeCount = await fixture.router.count(of: "mobile.events.subscribe")
+            return fixture.store.connectionState == .connected
+                && fixture.store.activeRoute?.kind == .tailscale
+                && subscribeCount >= 2
+        })
+        #expect(fixture.store.automaticReconnectBackoffOwner.accountID == nil)
     }
 
     @Test func disconnectedLocalTailscaleSessionAllowsManualRecovery() async throws {
@@ -803,6 +849,13 @@ extension ReconnectRouteSelectionTests {
         let diagnosticLog = DiagnosticLog(capacity: 128, role: .mobileClient)
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("local-tailscale-recovery-\(UUID().uuidString)")
+        let methodDefaults = UserDefaults(
+            suiteName: "local-tailscale-recovery-method-\(UUID().uuidString)"
+        )!
+        methodDefaults.set(
+            MobileConnectionMethod.tailscale.rawValue,
+            forKey: MobileConnectionMethodStore.methodKey
+        )
         let store = MobileShellComposite(
             runtime: LivenessTestRuntime(
                 transportFactory: factory,
@@ -811,6 +864,9 @@ extension ReconnectRouteSelectionTests {
             ),
             isSignedIn: true,
             pairedMacStore: nil,
+            connectionMethodStore: MobileConnectionMethodStore(
+                defaults: methodDefaults
+            ),
             identityProvider: nil,
             reachability: AlwaysOnlineReachability(),
             pairingHintDefaults: UserDefaults(

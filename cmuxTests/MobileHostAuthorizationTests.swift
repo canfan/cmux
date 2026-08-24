@@ -130,6 +130,95 @@ struct MobileHostAuthorizationTests {
             interfaceNames: ["en0"]
         ) == nil)
     }
+
+    @Test func testLocalPairingClaimsOnePhoneAndKeepsReconnectOverlapConnected() throws {
+        let suiteName = "MobileLocalPairingStateStoreTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = MobileLocalPairingStateStore(
+            defaults: defaults,
+            keyPrefix: "test.localPairing"
+        )
+        let firstConnectionID = UUID()
+        let replacementConnectionID = UUID()
+        let workspaceID = UUID()
+        let surfaceID = UUID()
+        let firstSeen = Date(timeIntervalSince1970: 1_725_000_000)
+        let disconnectedAt = firstSeen.addingTimeInterval(30)
+
+        #expect(store.preparePairing(capability: "phone-a-capability"))
+        #expect(store.authorize(capability: "phone-a-capability"))
+        #expect(!store.preparePairing(capability: "phone-b-capability"))
+        #expect(store.recordAuthorizedConnection(
+            id: firstConnectionID,
+            capability: "phone-a-capability",
+            deviceID: "phone-a",
+            displayName: "Test iPhone",
+            activeWorkspaceID: workspaceID,
+            activeSurfaceID: surfaceID,
+            at: firstSeen
+        ))
+        #expect(store.recordAuthorizedConnection(
+            id: replacementConnectionID,
+            capability: "phone-a-capability",
+            deviceID: "phone-a",
+            displayName: "Test iPhone",
+            activeWorkspaceID: workspaceID,
+            activeSurfaceID: surfaceID,
+            at: firstSeen.addingTimeInterval(1)
+        ))
+        store.connectionClosed(id: firstConnectionID, at: disconnectedAt)
+
+        var snapshot = try #require(store.snapshot)
+        #expect(snapshot.deviceID == "phone-a")
+        #expect(snapshot.displayName == "Test iPhone")
+        #expect(snapshot.isConnected)
+        #expect(snapshot.activeWorkspaceID == workspaceID)
+        #expect(snapshot.activeSurfaceID == surfaceID)
+
+        store.connectionClosed(id: replacementConnectionID, at: disconnectedAt)
+        snapshot = try #require(store.snapshot)
+        #expect(!snapshot.isConnected)
+        #expect(snapshot.lastSeen == disconnectedAt)
+        #expect(snapshot.activeWorkspaceID == nil)
+        #expect(snapshot.activeSurfaceID == nil)
+        #expect(!defaults.dictionaryRepresentation().values.contains {
+            ($0 as? String) == "phone-a-capability"
+        })
+    }
+
+    @Test func testLocalPairingMigratesOnceAndForgetRevokesTheOldPhone() throws {
+        let suiteName = "MobileLocalPairingStateStoreTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = MobileLocalPairingStateStore(
+            defaults: defaults,
+            keyPrefix: "test.localPairing"
+        )
+        let connectionID = UUID()
+
+        // A capability minted by the already-installed account-free build is
+        // adopted once because older Macs did not persist a paired-phone row.
+        #expect(store.authorize(capability: "legacy-phone-capability"))
+        #expect(store.recordAuthorizedConnection(
+            id: connectionID,
+            capability: "legacy-phone-capability",
+            deviceID: "legacy-phone",
+            displayName: "iPhone",
+            activeWorkspaceID: nil,
+            activeSurfaceID: nil,
+            at: Date(timeIntervalSince1970: 1_725_000_000)
+        ))
+        #expect(store.forget() == Set([connectionID]))
+        #expect(store.snapshot == nil)
+        #expect(!store.authorize(capability: "legacy-phone-capability"))
+
+        // Explicitly opening a new pairing invitation clears the migration
+        // tombstone for that new token only.
+        #expect(store.preparePairing(capability: "replacement-capability"))
+        #expect(store.authorize(capability: "replacement-capability"))
+        #expect(!store.authorize(capability: "legacy-phone-capability"))
+    }
     #if DEBUG
     @Test func testDebugStackAuthTokenPolicyRequiresConfiguredToken() {
         #expect(MobileHostDevStackAuthPolicy.normalizedToken("   ") == nil)

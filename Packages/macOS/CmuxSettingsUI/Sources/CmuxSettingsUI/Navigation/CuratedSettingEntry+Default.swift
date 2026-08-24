@@ -251,11 +251,11 @@ extension Array where Element == CuratedSettingEntry {
                 detailText: [
                     String(
                         localized: "settings.mobile.phonePush.forwarding.subtitleOn",
-                        defaultValue: "Sends local agent alerts from this Mac to cmux on your iPhone and iPad."
+                        defaultValue: "Uses cmux cloud and Apple Push Notification service to send local agent alerts from this Mac."
                     ),
                     String(
                         localized: "settings.mobile.phonePush.forwarding.subtitleOff",
-                        defaultValue: "Stops this Mac from sending local agent alerts to mobile devices."
+                        defaultValue: "Keeps agent alert content on this Mac; nothing is uploaded for phone push."
                     ),
                 ].joined(separator: " "),
                 synonyms: "push notifications iphone ipad mobile forwarding agent alerts forwardNotificationsToPhone"

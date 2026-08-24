@@ -18,6 +18,7 @@ struct NotificationFeedActions {
 /// state; rows receive immutable item snapshots plus ``NotificationFeedActions``.
 struct NotificationFeedView: View {
     let status: MobileNotificationFeedStatus
+    let syncsOverTailscale: Bool
     let projection: NotificationFeedProjection
     let refreshesOnAppear: Bool
     let actions: NotificationFeedActions
@@ -29,6 +30,8 @@ struct NotificationFeedView: View {
         @Bindable var projection = projection
 
         VStack(spacing: 0) {
+            NotificationFeedSyncBanner(syncsOverTailscale: syncsOverTailscale)
+            Divider()
             NotificationFeedList(
                 sections: projection.sections,
                 sourceItemCount: projection.sourceItemCount,

@@ -17,6 +17,7 @@ struct NotificationFeedStoreView: View {
     var body: some View {
         NotificationFeedView(
             status: status,
+            syncsOverTailscale: store.activeRoute?.kind == .tailscale,
             projection: projection,
             refreshesOnAppear: !isSearchDestination,
             actions: actions

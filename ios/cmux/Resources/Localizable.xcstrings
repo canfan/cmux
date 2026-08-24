@@ -14361,13 +14361,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Every agent alert from your paired Macs will collect here, even if push alerts are off. Enable push alerts in Settings only when you want an immediate heads-up away from the app."
+            "value": "Agent alerts sync directly from your paired Macs, even when push alerts are off. Enable push alerts only for a background heads-up away from the app."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "ペアリングしたすべてのMacからのエージェント通知が、プッシュ通知をオフにしていてもここに集まります。アプリを離れているときにすぐ知らせてほしい場合だけ、設定でプッシュ通知を有効にしてください。"
+            "value": "エージェント通知は、プッシュ通知がオフでも、ペアリング済みの Mac から直接同期されます。アプリを開いていないときに通知を受け取りたい場合だけ、プッシュ通知を有効にしてください。"
           }
         },
         "de": {
@@ -17596,6 +17596,57 @@
           "stringUnit": {
             "state": "translated",
             "value": "알림 검색"
+          }
+        }
+      }
+    },
+    "mobile.notificationFeed.sync.body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This feed syncs directly from your Mac. Background push alerts are separate and optional."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このフィードは Mac から直接同期されます。バックグラウンドのプッシュ通知は別機能で、任意です。"
+          }
+        }
+      }
+    },
+    "mobile.notificationFeed.sync.direct": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live from paired Macs"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ペアリング済みの Mac からライブ同期"
+          }
+        }
+      }
+    },
+    "mobile.notificationFeed.sync.tailscale": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live over Tailscale"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tailscale 経由でライブ同期"
           }
         }
       }

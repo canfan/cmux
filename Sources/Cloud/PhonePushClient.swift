@@ -10,7 +10,7 @@ nonisolated private let phonePushLog = Logger(
 )
 
 /// UserDefaults keys for the phone-forwarding feature. Missing preferences
-/// resolve to enabled + always; an explicit persisted choice remains authoritative.
+/// resolve to disabled + always; an explicit persisted choice remains authoritative.
 enum PhonePushSettings {
     static let forwardEnabledKey = "forwardNotificationsToPhone"
     static let hideContentKey = "forwardNotificationsHideContent"
@@ -30,7 +30,7 @@ struct PhonePushConfiguration: Equatable, Sendable {
 
     static func forwardingEnabled(in defaults: UserDefaults) -> Bool {
         guard defaults.object(forKey: PhonePushSettings.forwardEnabledKey) != nil else {
-            return true
+            return false
         }
         return defaults.bool(forKey: PhonePushSettings.forwardEnabledKey)
     }

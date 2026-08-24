@@ -62,6 +62,7 @@ public struct NotificationFeedPreviewView: View {
                 NavigationStack {
                     NotificationFeedView(
                         status: .ready,
+                        syncsOverTailscale: true,
                         projection: projection,
                         refreshesOnAppear: false,
                         actions: actions
@@ -99,6 +100,7 @@ public struct NotificationFeedPreviewView: View {
     private func notificationsTabFeed(proxy: ScrollViewProxy) -> some View {
         NotificationFeedView(
             status: .ready,
+            syncsOverTailscale: true,
             projection: projection,
             refreshesOnAppear: true,
             actions: actions

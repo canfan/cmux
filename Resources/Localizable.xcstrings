@@ -147349,7 +147349,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Send local agent notifications to cmux on your iPhone. Enabled by default; turn this off to stop this Mac from forwarding them."
+            "value": "Send local agent notifications to cmux on your iPhone. Off by default; nothing is uploaded unless you turn this on."
           }
         },
         "es": {
@@ -147373,7 +147373,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "ローカルエージェントの通知を iPhone の cmux に送信します。デフォルトでオンです。この Mac からの転送を停止するにはオフにしてください。"
+            "value": "ローカルエージェントの通知を iPhone の cmux に送信します。デフォルトではオフで、オンにしない限り何もアップロードされません。"
           }
         },
         "km": {
@@ -186561,13 +186561,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stops this Mac from sending local agent alerts to mobile devices."
+            "value": "Keeps agent alert content on this Mac; nothing is uploaded for phone push."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "この Mac からモバイルデバイスへのローカルエージェント通知の送信を停止します。"
+            "value": "エージェント通知の内容をこの Mac 内に保持し、スマートフォンへのプッシュ通知には何もアップロードしません。"
           }
         }
       }
@@ -186578,13 +186578,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sends local agent alerts from this Mac to cmux on your iPhone and iPad."
+            "value": "Uses cmux cloud and Apple Push Notification service to send local agent alerts from this Mac."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "この Mac のローカルエージェント通知を iPhone や iPad の cmux に送信します。"
+            "value": "cmux クラウドと Apple Push Notification サービスを使用して、この Mac のローカルエージェント通知を送信します。"
           }
         }
       }

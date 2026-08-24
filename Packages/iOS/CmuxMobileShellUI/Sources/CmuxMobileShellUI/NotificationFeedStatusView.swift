@@ -190,7 +190,7 @@ struct NotificationFeedEmptyRow: View {
         case .empty:
             L10n.string(
                 "mobile.notificationFeed.empty.body",
-                defaultValue: "Every agent alert from your paired Macs will collect here, even if push alerts are off. Enable push alerts in Settings only when you want an immediate heads-up away from the app."
+                defaultValue: "Agent alerts sync directly from your paired Macs, even when push alerts are off. Enable push alerts only for a background heads-up away from the app."
             )
         case .allRead:
             L10n.string(

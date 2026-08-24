@@ -22,7 +22,7 @@ public struct MobilePhonePushSettingsSnapshot: Equatable, Sendable {
     }
 
     public static let defaultValue = Self(
-        forwardingEnabled: true,
+        forwardingEnabled: false,
         mode: .always,
         hideContent: false
     )

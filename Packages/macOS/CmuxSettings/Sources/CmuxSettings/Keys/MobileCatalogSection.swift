@@ -5,7 +5,7 @@ public struct MobileCatalogSection: SettingCatalogSection {
     /// Whether local agent notifications are forwarded to cmux on iOS.
     public let phonePushForwarding = DefaultsKey<Bool>(
         id: "mobile.phonePush.forwardingEnabled",
-        defaultValue: true,
+        defaultValue: false,
         userDefaultsKey: "forwardNotificationsToPhone"
     )
 

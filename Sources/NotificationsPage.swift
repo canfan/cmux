@@ -120,7 +120,10 @@ struct NotificationsPage: View {
             Toggle(isOn: forwardToPhoneBinding) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(String(localized: "notifications.forwardToPhone.title", defaultValue: "Forward notifications to my iPhone"))
-                    Text(String(localized: "notifications.forwardToPhone.subtitle", defaultValue: "Send local agent notifications to cmux on your iPhone. Enabled by default; turn this off to stop this Mac from forwarding them."))
+                    Text(String(
+                        localized: "notifications.forwardToPhone.subtitle",
+                        defaultValue: "Send local agent notifications to cmux on your iPhone. Off by default; nothing is uploaded unless you turn this on."
+                    ))
                         .cmuxFont(.caption)
                         .foregroundColor(.secondary)
                 }

@@ -106,4 +106,59 @@ struct SocketClientCapabilityTests {
 
         #expect(store.loadOrCreateSecret() == generated)
     }
+
+    @Test func fileSecretStoreSurvivesAdHocBuildRestarts() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let fileURL = directory.appendingPathComponent("mobile-local-pairing.secret")
+        let generated = Data(
+            repeating: 0x5A,
+            count: SocketClientCapabilityAuthority.secureByteCount
+        )
+        let first = SocketClientCapabilityFileSecretStore(
+            fileURL: fileURL,
+            randomData: { count in
+                #expect(count == SocketClientCapabilityAuthority.secureByteCount)
+                return generated
+            }
+        )
+
+        #expect(first.loadOrCreateSecret() == generated)
+
+        let recreated = SocketClientCapabilityFileSecretStore(
+            fileURL: fileURL,
+            randomData: { _ in
+                Issue.record("A persisted file secret must be reused")
+                return Data()
+            }
+        )
+        #expect(recreated.loadOrCreateSecret() == generated)
+        let attributes = try FileManager.default.attributesOfItem(atPath: fileURL.path)
+        let permissions = try #require(attributes[.posixPermissions] as? NSNumber)
+        #expect(permissions.intValue & 0o777 == 0o600)
+    }
+
+    @Test func fileSecretStoreRejectsSymlinkTargets() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let targetURL = directory.appendingPathComponent("target")
+        let fileURL = directory.appendingPathComponent("mobile-local-pairing.secret")
+        try Data(repeating: 0x44, count: SocketClientCapabilityAuthority.secureByteCount)
+            .write(to: targetURL)
+        try FileManager.default.createSymbolicLink(at: fileURL, withDestinationURL: targetURL)
+        let generated = Data(
+            repeating: 0x6B,
+            count: SocketClientCapabilityAuthority.secureByteCount
+        )
+        let store = SocketClientCapabilityFileSecretStore(
+            fileURL: fileURL,
+            randomData: { _ in generated }
+        )
+
+        #expect(store.loadOrCreateSecret() == generated)
+        #expect(try Data(contentsOf: targetURL) != generated)
+    }
 }

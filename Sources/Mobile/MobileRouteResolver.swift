@@ -4,6 +4,7 @@ import Foundation
 
 struct MobileHostRouteSnapshot: Sendable {
     let routes: [CmxAttachRoute]
+    let tailscaleDNSName: String?
 
     var payload: [[String: Any]] {
         routes.mobileHostJSONObjects(for: .authenticated)
@@ -97,7 +98,13 @@ final class MobileRouteResolver: @unchecked Sendable {
             }
         }
 
-        return MobileHostRouteSnapshot(routes: resolved)
+        let tailscaleDNSName = Self.deduplicatedHosts(tailscaleHosts).first {
+            Self.isTailscaleDNSName($0)
+        }?.trimmingCharacters(in: CharacterSet(charactersIn: "."))
+        return MobileHostRouteSnapshot(
+            routes: resolved,
+            tailscaleDNSName: tailscaleDNSName
+        )
     }
 
     private struct TailscaleAddressCandidate {

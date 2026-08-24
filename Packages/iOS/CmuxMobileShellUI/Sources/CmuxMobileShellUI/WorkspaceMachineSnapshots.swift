@@ -1,5 +1,7 @@
+import CmuxMobilePairedMac
 import CmuxMobileShellModel
 import CmuxMobileSupport
+import Foundation
 
 struct WorkspaceMachineSnapshots: Equatable {
     var filterMachines: [WorkspaceFilterMachine]
@@ -23,8 +25,27 @@ struct WorkspaceMachineSnapshots: Equatable {
         macPickerMachineIDs: Set<String>,
         namesByID: [String: String],
         buildLabelsByID: [String: String] = [:],
-        fallbackName: String
+        fallbackName: String,
+        foregroundMacDeviceID: String? = nil,
+        foregroundInstanceTag: String? = nil,
+        connectedHostName: String? = nil
     ) {
+        var resolvedNamesByID = namesByID
+        if let foregroundMacDeviceID,
+           let connectedHostName = connectedHostName?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !connectedHostName.isEmpty {
+            if resolvedNamesByID[foregroundMacDeviceID] == nil {
+                resolvedNamesByID[foregroundMacDeviceID] = connectedHostName
+            }
+            let pairingID = MobilePairedMac.pairingID(
+                macDeviceID: foregroundMacDeviceID,
+                instanceTag: foregroundInstanceTag
+            )
+            if resolvedNamesByID[pairingID] == nil {
+                resolvedNamesByID[pairingID] = connectedHostName
+            }
+        }
         let sourceMachineIDs = MobileWorkspaceListFilter.machineIDs(in: workspaces)
         var representativeIDByMachineID = Dictionary(
             sourceMachineIDs.map { ($0, filterMachineIDFor($0)) },
@@ -40,7 +61,7 @@ struct WorkspaceMachineSnapshots: Equatable {
                 .map {
                     WorkspaceFilterMachine(
                         id: $0,
-                        namesByID: namesByID,
+                        namesByID: resolvedNamesByID,
                         buildLabel: nil,
                         fallbackName: fallbackName
                     )
@@ -51,7 +72,7 @@ struct WorkspaceMachineSnapshots: Equatable {
             .map {
                 WorkspaceFilterMachine(
                     id: $0,
-                    namesByID: namesByID,
+                    namesByID: resolvedNamesByID,
                     buildLabel: buildLabelsByID[$0],
                     fallbackName: fallbackName
                 )

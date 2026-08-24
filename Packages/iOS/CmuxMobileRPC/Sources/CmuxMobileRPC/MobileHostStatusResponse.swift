@@ -17,6 +17,9 @@ public struct MobileHostStatusResponse: Decodable, Sendable {
     /// so this is where a freshly paired phone learns what to call the Mac.
     /// `nil` from older Macs that predate the field.
     public let macDisplayName: String?
+    /// The Mac's authenticated Tailscale MagicDNS identity. Local pairing uses
+    /// its first label as the compact device name while keeping numeric routes.
+    public let macTailscaleDNSName: String?
     /// The Mac's stable pairing device id. The minimal v2 pairing QR no
     /// longer carries it, so this is where a freshly paired phone learns
     /// which paired-Mac record the connection belongs to (reconnect-on-launch
@@ -54,6 +57,7 @@ public struct MobileHostStatusResponse: Decodable, Sendable {
         case capabilities
         case terminalFidelity = "terminal_fidelity"
         case macDisplayName = "mac_display_name"
+        case macTailscaleDNSName = "mac_tailscale_dns_name"
         case macDeviceID = "mac_device_id"
         case macInstanceTag = "mac_instance_tag"
         case macClientNamespace = "mac_client_namespace"
@@ -70,6 +74,10 @@ public struct MobileHostStatusResponse: Decodable, Sendable {
         capabilities = (try container.decodeIfPresent([String].self, forKey: .capabilities)) ?? []
         terminalFidelity = try container.decodeIfPresent(String.self, forKey: .terminalFidelity)
         macDisplayName = try container.decodeIfPresent(String.self, forKey: .macDisplayName)
+        macTailscaleDNSName = try container.decodeIfPresent(
+            String.self,
+            forKey: .macTailscaleDNSName
+        )
         macDeviceID = try container.decodeIfPresent(String.self, forKey: .macDeviceID)
             .map(cmxCanonicalDeviceID)
         macInstanceTag = try container.decodeIfPresent(String.self, forKey: .macInstanceTag)

@@ -944,7 +944,10 @@ struct WorkspaceShellView: View {
             macPickerMachineIDs: scope.machineIDs,
             namesByID: names,
             buildLabelsByID: buildLabelsByID,
-            fallbackName: L10n.string("mobile.workspaces.macPicker.connectionLabel", defaultValue: "Computer")
+            fallbackName: L10n.string("mobile.workspaces.macPicker.connectionLabel", defaultValue: "Computer"),
+            foregroundMacDeviceID: store.connectedMacDeviceID ?? store.activeTicket?.macDeviceID,
+            foregroundInstanceTag: store.connectedMacInstanceTag,
+            connectedHostName: store.connectedHostName
         )
         return WorkspaceShellRenderPresentation(
             selectionScope: scope,

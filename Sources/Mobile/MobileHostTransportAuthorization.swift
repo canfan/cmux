@@ -315,10 +315,15 @@ enum MobileHostPublicStatusCache {
     private static let lock = NSLock()
     private nonisolated(unsafe) static var legacyRoutes: [CmxAttachRoute] = []
     private nonisolated(unsafe) static var irohRoute: CmxAttachRoute?
+    private nonisolated(unsafe) static var tailscaleDNSName: String?
 
-    static func update(routes nextRoutes: [CmxAttachRoute]) {
+    static func update(
+        routes nextRoutes: [CmxAttachRoute],
+        tailscaleDNSName nextTailscaleDNSName: String? = nil
+    ) {
         lock.lock()
         legacyRoutes = nextRoutes
+        tailscaleDNSName = nextTailscaleDNSName
         lock.unlock()
         NotificationCenter.default.post(name: .mobileHostStatusDidChange, object: nil)
     }
@@ -364,6 +369,7 @@ enum MobileHostPublicStatusCache {
         lock.lock()
         legacyRoutes = []
         irohRoute = nil
+        tailscaleDNSName = nil
         lock.unlock()
         NotificationCenter.default.post(name: .mobileHostStatusDidChange, object: nil)
     }
@@ -389,11 +395,13 @@ enum MobileHostPublicStatusCache {
     ) -> MobileHostRPCResult {
         lock.lock()
         let cachedRoutes = mergedRoutesLocked()
+        let cachedTailscaleDNSName = tailscaleDNSName
         lock.unlock()
         return .ok(
             includeIdentity
                 ? MobileHostService.identityStatusPayload(
                     routes: cachedRoutes,
+                    tailscaleDNSName: cachedTailscaleDNSName,
                     additionalCapabilities: additionalCapabilities,
                     phonePushAdmission: phonePushAdmission,
                     phonePushQueuePersistenceStatus:

@@ -4596,6 +4596,7 @@ public final class MobileShellComposite: MobileTerminalOutputSinking {
                 client: client,
                 deviceID: payload.macDeviceID,
                 displayName: payload.macDisplayName,
+                tailscaleDNSName: payload.macTailscaleDNSName,
                 instanceTag: payload.macInstanceTag,
                 clientNamespace: payload.macClientNamespace,
                 macAppVersion: payload.macAppVersion,
@@ -4619,6 +4620,7 @@ public final class MobileShellComposite: MobileTerminalOutputSinking {
         client: MobileCoreRPCClient,
         deviceID: String?,
         displayName: String?,
+        tailscaleDNSName: String? = nil,
         instanceTag: String?,
         clientNamespace: String? = nil,
         macAppVersion: String? = nil,
@@ -4662,7 +4664,11 @@ public final class MobileShellComposite: MobileTerminalOutputSinking {
             resolvedTicket = ticket
         }
         guard remoteClient === client else { return }
-        let resolvedName = displayName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedName = MobileLocalPairingHostDisplayName.resolve(
+            macDisplayName: displayName,
+            tailscaleDNSName: tailscaleDNSName,
+            isLocalPairing: ticket.localPairing
+        )
         let resolvedTag = instanceTag?.trimmingCharacters(in: .whitespacesAndNewlines)
         guard authenticatedMacBuildIsCompatible(
             instanceTag: resolvedTag,
@@ -10098,7 +10104,13 @@ public final class MobileShellComposite: MobileTerminalOutputSinking {
                     if previousFocusedConnection == nil {
                         activeTicket = resolvedTicket
                     }
-                    let reportedName = hasAuthenticatedIdentity ? status.macDisplayName : nil
+                    let reportedName = hasAuthenticatedIdentity
+                        ? MobileLocalPairingHostDisplayName.resolve(
+                            macDisplayName: status.macDisplayName,
+                            tailscaleDNSName: status.macTailscaleDNSName,
+                            isLocalPairing: resolvedTicket.localPairing
+                        )
+                        : nil
                     if let reportedName = reportedName?
                         .trimmingCharacters(in: .whitespacesAndNewlines),
                        !reportedName.isEmpty {
@@ -13066,6 +13078,7 @@ public final class MobileShellComposite: MobileTerminalOutputSinking {
                 client: client,
                 deviceID: payload.macDeviceID,
                 displayName: payload.macDisplayName,
+                tailscaleDNSName: payload.macTailscaleDNSName,
                 instanceTag: payload.macInstanceTag,
                 clientNamespace: payload.macClientNamespace,
                 macAppVersion: payload.macAppVersion,

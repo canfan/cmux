@@ -55,7 +55,10 @@ extension WorkspaceListView {
             macPickerMachineIDs: scope.machineIDs,
             namesByID: macDisplayNamesByID(),
             buildLabelsByID: macBuildLabelsByID(),
-            fallbackName: fallbackMacPickerName
+            fallbackName: fallbackMacPickerName,
+            foregroundMacDeviceID: store?.connectedMacDeviceID ?? store?.activeTicket?.macDeviceID,
+            foregroundInstanceTag: store?.connectedMacInstanceTag,
+            connectedHostName: store?.connectedHostName
         )
     }
 

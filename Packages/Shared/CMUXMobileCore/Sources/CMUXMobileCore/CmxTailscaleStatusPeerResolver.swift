@@ -8,6 +8,11 @@ import Foundation
 /// that record, and then prefers IPv4 over IPv6. The caller persists the numeric
 /// result so iOS never has to trust or re-resolve the DNS name.
 public struct CmxTailscaleStatusPeerResolver: Sendable {
+    private struct Candidate {
+        let object: [String: Any]
+        let isLocalDevice: Bool
+    }
+
     /// Maximum accepted status size, bounding local command output parsing.
     public static let maximumStatusBytes = 8 * 1024 * 1024
     /// Maximum peer records inspected from one status snapshot.
@@ -31,6 +36,52 @@ public struct CmxTailscaleStatusPeerResolver: Sendable {
         guard let requestedName = normalizedMagicDNSName(magicDNSName) else {
             throw CmxTailscaleStatusPeerResolutionError.invalidMagicDNSName
         }
+        let candidates = try candidates(from: statusJSON)
+        let matches = candidates.filter { candidate in
+            guard let dnsName = candidate.object["DNSName"] as? String else { return false }
+            return normalizedDNSName(dnsName) == requestedName
+        }
+        return try resolvedRecord(
+            from: matches,
+            allowLocalDevice: allowLocalDevice
+        )
+    }
+
+    /// Finds one exact peer record containing an admitted numeric Tailscale address.
+    /// - Parameters:
+    ///   - peerAddress: A numeric Tailscale peer address observed on the connection.
+    ///   - statusJSON: Authenticated local output from `tailscale status --json`.
+    ///   - allowLocalDevice: Whether a matching `Self` record may be returned.
+    /// - Returns: The exact peer record and its authenticated MagicDNS identity.
+    /// - Throws: ``CmxTailscaleStatusPeerResolutionError`` when the address or status is unsafe.
+    public func resolve(
+        peerAddress: String,
+        statusJSON: Data,
+        allowLocalDevice: Bool = false
+    ) throws -> CmxTailscalePeerRecord {
+        guard let requestedAddress = CmxTailscalePeerAddress(peerAddress) else {
+            throw CmxTailscaleStatusPeerResolutionError.invalidPeerAddress
+        }
+        let candidates = try candidates(from: statusJSON)
+        let matches = candidates.filter { candidate in
+            guard let rawAddresses = candidate.object["TailscaleIPs"] as? [Any] else {
+                return false
+            }
+            return rawAddresses.contains { rawAddress in
+                guard let value = rawAddress as? String,
+                      let address = CmxTailscalePeerAddress(value) else {
+                    return false
+                }
+                return address == requestedAddress
+            }
+        }
+        return try resolvedRecord(
+            from: matches,
+            allowLocalDevice: allowLocalDevice
+        )
+    }
+
+    private func candidates(from statusJSON: Data) throws -> [Candidate] {
         guard !statusJSON.isEmpty,
               statusJSON.count <= Self.maximumStatusBytes,
               let root = try? JSONSerialization.jsonObject(with: statusJSON) as? [String: Any] else {
@@ -40,9 +91,9 @@ public struct CmxTailscaleStatusPeerResolver: Sendable {
             throw CmxTailscaleStatusPeerResolutionError.statusNotRunning
         }
 
-        var candidates: [(object: [String: Any], isLocalDevice: Bool)] = []
+        var candidates: [Candidate] = []
         if let local = root["Self"] as? [String: Any] {
-            candidates.append((local, true))
+            candidates.append(Candidate(object: local, isLocalDevice: true))
         }
         if let peers = root["Peer"] as? [String: Any] {
             guard peers.count <= Self.maximumPeerRecords else {
@@ -50,16 +101,19 @@ public struct CmxTailscaleStatusPeerResolver: Sendable {
             }
             candidates.append(contentsOf: peers.values.compactMap { value in
                 guard let object = value as? [String: Any] else { return nil }
-                return (object, false)
+                return Candidate(object: object, isLocalDevice: false)
             })
         } else if root["Peer"] != nil, !(root["Peer"] is NSNull) {
             throw CmxTailscaleStatusPeerResolutionError.malformedStatus
         }
 
-        let matches = candidates.filter { candidate in
-            guard let dnsName = candidate.object["DNSName"] as? String else { return false }
-            return normalizedDNSName(dnsName) == requestedName
-        }
+        return candidates
+    }
+
+    private func resolvedRecord(
+        from matches: [Candidate],
+        allowLocalDevice: Bool
+    ) throws -> CmxTailscalePeerRecord {
         guard !matches.isEmpty else {
             throw CmxTailscaleStatusPeerResolutionError.peerNotFound
         }
@@ -68,6 +122,10 @@ public struct CmxTailscaleStatusPeerResolver: Sendable {
         }
         guard allowLocalDevice || !match.isLocalDevice else {
             throw CmxTailscaleStatusPeerResolutionError.localDeviceNotAllowed
+        }
+        guard let rawDNSName = match.object["DNSName"] as? String,
+              let dnsName = normalizedMagicDNSName(rawDNSName) else {
+            throw CmxTailscaleStatusPeerResolutionError.invalidMagicDNSName
         }
         guard let rawAddresses = match.object["TailscaleIPs"] as? [Any],
               !rawAddresses.isEmpty else {
@@ -92,7 +150,7 @@ public struct CmxTailscaleStatusPeerResolver: Sendable {
 
         return CmxTailscalePeerRecord(
             stableID: (match.object["ID"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
-            dnsName: requestedName,
+            dnsName: dnsName,
             addresses: orderedAddresses,
             preferredAddress: preferredAddress,
             isLocalDevice: match.isLocalDevice

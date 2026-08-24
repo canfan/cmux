@@ -179,10 +179,9 @@ import Testing
     }
 
     @Test func hostStatusDecodesAuthenticatedMacTailscaleDNSIdentity() throws {
-        let response = try MobileHostStatusResponse.decode(Data(#"{
-          "capabilities": [],
-          "mac_tailscale_dns_name": "test-mac.tailnet.ts.net"
-        }"#.utf8))
+        let response = try MobileHostStatusResponse.decode(Data(
+            #"{"capabilities":[],"mac_tailscale_dns_name":"test-mac.tailnet.ts.net"}"#.utf8
+        ))
 
         #expect(response.macTailscaleDNSName == "test-mac.tailnet.ts.net")
     }

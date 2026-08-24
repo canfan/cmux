@@ -316,6 +316,7 @@ final class MobileHostService {
     /// the connection, and which app instance owns its routes.
     nonisolated static func identityStatusPayload(
         routes: [CmxAttachRoute],
+        tailscaleDNSName: String? = nil,
         additionalCapabilities: Set<String> = [],
         phonePushDefaults: UserDefaults = .standard,
         phonePushAdmission: PhonePushAdmission = .unknown,
@@ -368,6 +369,9 @@ final class MobileHostService {
         if let displayName = MobileHostIdentity.instanceDisplayName() {
             payload["mac_display_name"] = displayName
         }
+        if let tailscaleDNSName = Self.normalizedTailscaleDNSName(tailscaleDNSName) {
+            payload["mac_tailscale_dns_name"] = tailscaleDNSName
+        }
         let build = MobileHostBuildIdentity.current()
         if let appVersion = build.appVersion {
             payload["mac_app_version"] = appVersion
@@ -376,6 +380,12 @@ final class MobileHostService {
             payload["mac_app_build"] = appBuild
         }
         return payload
+    }
+
+    nonisolated private static func normalizedTailscaleDNSName(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let normalized = trimmed.hasSuffix(".") ? String(trimmed.dropLast()) : trimmed
+        return normalized.lowercased().hasSuffix(".ts.net") ? normalized.lowercased() : nil
     }
 
     nonisolated private static func canonicalPhonePushAPIBaseURL(_ url: URL) -> String {
@@ -1023,7 +1033,7 @@ final class MobileHostService {
                 self?.updatePublicStatusRoutes(port: port, generation: generation, tailscaleHosts: hosts)
             }
         })
-        MobileHostPublicStatusCache.update(routes: routeResolver.routes(port: port).routes)
+        updatePublicStatusRoutes(routeResolver.routes(port: port))
         startNetworkPathMonitorIfNeeded()
         drainReadinessWaiters()
     }
@@ -1073,7 +1083,7 @@ final class MobileHostService {
         listenerPort = port
         appliedPreferredPort = port
         lastErrorDescription = nil
-        MobileHostPublicStatusCache.update(routes: routeResolver.routes(port: port).routes)
+        updatePublicStatusRoutes(routeResolver.routes(port: port))
         mobileHostLog.info("mobile host listener disabled; publishing XCTest routes without binding")
     }
     #endif
@@ -1360,6 +1370,11 @@ final class MobileHostService {
                         )
                     }
                 },
+                localPairingPeerAddress: {
+                    Self.tailscalePeerAddress(
+                        from: connection.currentPath?.remoteEndpoint
+                    )
+                },
                 isCurrent: {
                     await MobileHostService.shared.canAcceptConnection(
                         generation: generation
@@ -1378,6 +1393,7 @@ final class MobileHostService {
         localPairingAuthorization: @escaping @Sendable (MobileHostRPCRequest) async -> Bool = { _ in
             false
         },
+        localPairingPeerAddress: @escaping @Sendable () -> String? = { nil },
         promoteUsableSession: @escaping @Sendable () async -> Bool = { true },
         remoteControlDisabledByPolicy: @escaping @Sendable () -> Bool = {
             MobileRemoteControlPolicy.isDisabled
@@ -1422,7 +1438,8 @@ final class MobileHostService {
             onAuthorizedRequest: { request in
                 await MobileHostService.shared.recordAuthorizedRequest(
                     request,
-                    connectionID: id
+                    connectionID: id,
+                    localPairingPeerAddress: localPairingPeerAddress()
                 )
             },
             onUsableSession: {
@@ -1737,7 +1754,8 @@ final class MobileHostService {
 
     private func recordAuthorizedRequest(
         _ request: MobileHostRPCRequest,
-        connectionID: UUID
+        connectionID: UUID,
+        localPairingPeerAddress: String?
     ) {
         let clientID = Self.clientID(from: request.params)
         if let clientID {
@@ -1757,10 +1775,14 @@ final class MobileHostService {
         let deviceID = Self.nonemptyString(
             request.params["device_id"] as? String
         ) ?? clientID
-        let displayName = Self.nonemptyString(
+        let reportedDisplayName = Self.nonemptyString(
             request.params["device_name"] as? String
         )
         let previousSnapshot = localPairingStateStore.snapshot
+        // Once the Mac has resolved the admitted peer through Tailscale's
+        // authenticated node map, a later subscription must not downgrade the
+        // durable label back to UIDevice's generic "iPhone" value.
+        let displayName = previousSnapshot?.displayName ?? reportedDisplayName
         let workspaceKeys = ["active_workspace_id", "workspace_id"]
         let surfaceKeys = [
             "active_surface_id", "surface_id", "terminal_id", "tab_id",
@@ -1784,6 +1806,66 @@ final class MobileHostService {
         if localPairingStateStore.snapshot != previousSnapshot {
             NotificationCenter.default.post(name: .mobileHostStatusDidChange, object: nil)
         }
+        if let localPairingPeerAddress {
+            resolveLocalPairingPeerDisplayName(
+                peerAddress: localPairingPeerAddress,
+                connectionID: connectionID,
+                capability: capability,
+                deviceID: deviceID,
+                activeWorkspaceID: workspaceID,
+                activeSurfaceID: surfaceID
+            )
+        }
+    }
+
+    private func resolveLocalPairingPeerDisplayName(
+        peerAddress: String,
+        connectionID: UUID,
+        capability: String,
+        deviceID: String?,
+        activeWorkspaceID: UUID?,
+        activeSurfaceID: UUID?
+    ) {
+        Task { @MainActor [weak self] in
+            do {
+                let statusJSON = try await SystemTailscaleStatusProvider().statusJSON()
+                guard !Task.isCancelled,
+                      MobileHostConnectionRegistry.shared.connection(id: connectionID) != nil else {
+                    return
+                }
+                let peer = try CmxTailscaleStatusPeerResolver().resolve(
+                    peerAddress: peerAddress,
+                    statusJSON: statusJSON
+                )
+                guard let self else { return }
+                let previousSnapshot = self.localPairingStateStore.snapshot
+                guard self.localPairingStateStore.recordAuthorizedConnection(
+                    id: connectionID,
+                    capability: capability,
+                    deviceID: deviceID,
+                    displayName: peer.displayName,
+                    activeWorkspaceID: activeWorkspaceID,
+                    activeSurfaceID: activeSurfaceID
+                ) else {
+                    return
+                }
+                if self.localPairingStateStore.snapshot != previousSnapshot {
+                    NotificationCenter.default.post(
+                        name: .mobileHostStatusDidChange,
+                        object: nil
+                    )
+                }
+            } catch {
+                mobileHostLog.info(
+                    "local pairing peer-name resolution unavailable: \(String(describing: error), privacy: .public)"
+                )
+            }
+        }
+    }
+
+    nonisolated private static func tailscalePeerAddress(from endpoint: NWEndpoint?) -> String? {
+        guard case let .hostPort(host, _)? = endpoint else { return nil }
+        return CmxTailscalePeerAddress(String(describing: host))?.value
     }
 
     private nonisolated static func nonemptyString(_ value: String?) -> String? {
@@ -1996,7 +2078,7 @@ final class MobileHostService {
                         )
                     }
                 })
-                MobileHostPublicStatusCache.update(routes: routeResolver.routes(port: listenerPort).routes)
+                updatePublicStatusRoutes(routeResolver.routes(port: listenerPort))
             } else {
                 MobileHostPublicStatusCache.update(routes: [])
             }
@@ -2063,8 +2145,15 @@ final class MobileHostService {
         guard generation == listenerGeneration, listenerPort == port else {
             return
         }
+        updatePublicStatusRoutes(
+            routeResolver.routes(port: port, tailscaleHosts: tailscaleHosts)
+        )
+    }
+
+    private func updatePublicStatusRoutes(_ snapshot: MobileHostRouteSnapshot) {
         MobileHostPublicStatusCache.update(
-            routes: routeResolver.routes(port: port, tailscaleHosts: tailscaleHosts).routes
+            routes: snapshot.routes,
+            tailscaleDNSName: snapshot.tailscaleDNSName
         )
     }
 
@@ -2112,7 +2201,7 @@ final class MobileHostService {
                 self?.updatePublicStatusRoutes(port: port, generation: generation, tailscaleHosts: hosts)
             }
         })
-        MobileHostPublicStatusCache.update(routes: routeResolver.routes(port: port).routes)
+        updatePublicStatusRoutes(routeResolver.routes(port: port))
     }
 }
 

@@ -10,4 +10,9 @@ public struct CmxTailscalePeerRecord: Equatable, Sendable {
     public let preferredAddress: CmxTailscalePeerAddress
     /// Whether this record came from the status snapshot's `Self` entry.
     public let isLocalDevice: Bool
+
+    /// The Tailscale node label suitable for compact device-name UI.
+    public var displayName: String {
+        dnsName.split(separator: ".", maxSplits: 1).first.map(String.init) ?? dnsName
+    }
 }

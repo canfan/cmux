@@ -21,6 +21,7 @@ struct PairingView: View {
     let connectionErrorGuidance: String?
     let versionWarning: String?
     let connectPairingCode: () async -> Void
+    let connectScannedCode: (String) async -> Void
     let acceptVersionWarning: () async -> Void
     let connectManualHost: (String, String, Int) async -> Void
     let cancelPairing: () -> Void
@@ -46,6 +47,7 @@ struct PairingView: View {
         connectionErrorGuidance: String?,
         versionWarning: String?,
         connectPairingCode: @escaping () async -> Void,
+        connectScannedCode: @escaping (String) async -> Void,
         acceptVersionWarning: @escaping () async -> Void,
         connectManualHost: @escaping (String, String, Int) async -> Void,
         cancelPairing: @escaping () -> Void,
@@ -57,6 +59,7 @@ struct PairingView: View {
         self.connectionErrorGuidance = connectionErrorGuidance
         self.versionWarning = versionWarning
         self.connectPairingCode = connectPairingCode
+        self.connectScannedCode = connectScannedCode
         self.acceptVersionWarning = acceptVersionWarning
         self.connectManualHost = connectManualHost
         self.cancelPairing = cancelPairing
@@ -331,7 +334,7 @@ struct PairingView: View {
             pairingCode = scannedCode
             isShowingScanner = false
             startPairingTask {
-                await connectPairingCode()
+                await connectScannedCode(scannedCode)
             }
         }
     }

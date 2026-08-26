@@ -599,6 +599,9 @@ struct CMUXMobileRootView: View {
             connectPairingCode: {
                 await store.connectPairingInput()
             },
+            connectScannedCode: { rawURL in
+                connectScannedAttachURL(rawURL)
+            },
             acceptVersionWarning: {
                 let result = await store.acceptPairingVersionWarning()
                 clearAttachTicketAuthentication(after: result)
@@ -1206,6 +1209,21 @@ struct CMUXMobileRootView: View {
     }
 
     private func connectAttachURL(_ rawURL: String) {
+        connectAttachURL(rawURL, userEnteredPairingCode: false)
+    }
+
+    /// Hands an in-app camera result to the same root-owned authentication and
+    /// connection path as an external deep link, while preserving the explicit
+    /// Tailscale-route authorization granted by scanning the Mac's code.
+    private func connectScannedAttachURL(_ rawURL: String) {
+        connectAttachURL(rawURL, userEnteredPairingCode: true)
+        dismissAddDeviceSheet()
+    }
+
+    private func connectAttachURL(
+        _ rawURL: String,
+        userEnteredPairingCode: Bool
+    ) {
         guard !authManager.isRestoringSession else {
             pendingAttachURL = rawURL
             diagnosticLog?.recordAppEvent(.appOpenURLDeferredForAuthentication)
@@ -1216,6 +1234,7 @@ struct CMUXMobileRootView: View {
         syncShellAuthentication(true)
         startOpenURLConnection(
             rawURL,
+            userEnteredPairingCode: userEnteredPairingCode,
             followUp: .finishAttachTicketAuthentication
         )
     }
@@ -1242,6 +1261,7 @@ struct CMUXMobileRootView: View {
 
     private func startOpenURLConnection(
         _ rawURL: String,
+        userEnteredPairingCode: Bool = false,
         followUp: OpenURLConnectionFollowUp = .none
     ) {
         cancelOpenURLTask(failure: .superseded)
@@ -1253,7 +1273,10 @@ struct CMUXMobileRootView: View {
             // connection otherwise fast-fails this attempt (`timedOut` within
             // milliseconds) for the damper's remaining 30s.
             await authManager.supersedeTimedOutAuthPhases()
-            let result = await store.connectPairingURLResult(rawURL)
+            let result = await store.connectPairingURLResult(
+                rawURL,
+                userEnteredPairingCode: userEnteredPairingCode
+            )
             guard !Task.isCancelled, openURLTaskToken == token else { return }
             let failure: DiagnosticFailureKind? = switch result {
             case .connected:

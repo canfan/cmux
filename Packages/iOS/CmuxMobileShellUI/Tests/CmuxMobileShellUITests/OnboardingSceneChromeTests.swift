@@ -101,6 +101,24 @@ import UIKit
         #expect(ready.secondaryTitle == nil)
     }
 
+    @Test func signedOutTailscaleRepairCanScanWithoutReturningToTheTour() {
+        let repair = OnboardingSceneChrome(
+            stage: .connect,
+            isAuthenticated: false,
+            connectionPhase: .idle,
+            connectionMethod: .tailscale,
+            allowsBackNavigationFromConnection: false
+        )
+
+        #expect(!repair.showsBack)
+        #expect(!repair.showsSkip)
+        #expect(repair.primaryTitle == L10n.string(
+            "mobile.onboarding.connect.scanTailscaleCode",
+            defaultValue: "Scan Pairing Code"
+        ))
+        #expect(repair.secondaryTitle == nil)
+    }
+
     @Test func screenshotLanguageMatchesTheSupportedLocale() {
         #expect(
             OnboardingScreenshotLanguage.resolve(

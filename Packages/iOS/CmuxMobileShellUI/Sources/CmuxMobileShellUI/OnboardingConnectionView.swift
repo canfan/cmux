@@ -6,6 +6,7 @@ import SwiftUI
 struct OnboardingConnectionView: View {
     let phase: OnboardingConnectionPhase
     let connectionMethod: MobileConnectionMethod
+    let allowsAutomaticConnection: Bool
     let onSelectConnectionMethod: (MobileConnectionMethod) -> Void
     var keepAwakeOffer: OnboardingKeepAwakeOffer?
     var onSetKeepAwake: (Bool) async -> Void = { _ in }
@@ -55,6 +56,7 @@ struct OnboardingConnectionView: View {
                 OnboardingConnectionMethodPicker(
                     method: connectionMethod,
                     density: density,
+                    allowsAutomaticConnection: allowsAutomaticConnection,
                     onSelect: onSelectConnectionMethod
                 )
                 .frame(maxWidth: .infinity)
@@ -67,6 +69,7 @@ struct OnboardingConnectionView: View {
                     OnboardingConnectionMethodPicker(
                         method: connectionMethod,
                         density: density,
+                        allowsAutomaticConnection: allowsAutomaticConnection,
                         onSelect: onSelectConnectionMethod
                     )
                 }

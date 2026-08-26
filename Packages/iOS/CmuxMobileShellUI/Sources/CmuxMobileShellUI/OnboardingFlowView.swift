@@ -4,13 +4,14 @@ import CmuxMobileShellModel
 import CmuxMobileSupport
 import SwiftUI
 
-/// A short product tour presented after sign-in, ending in same-account
-/// computer discovery, with pairing available for Tailscale.
+/// A short product tour that leads into automatic discovery or local Tailscale pairing.
 struct OnboardingFlowView: View {
     let context: OnboardingContext
     let isAuthenticated: Bool
     let connectionPhase: OnboardingConnectionPhase
     let connectionMethod: MobileConnectionMethod
+    let allowsAutomaticConnection: Bool
+    let allowsBackNavigationFromConnection: Bool
     let keepAwakeOffer: OnboardingKeepAwakeOffer?
     let onSelectConnectionMethod: (MobileConnectionMethod) -> Void
     let onEnablePush: () async -> Bool
@@ -34,6 +35,8 @@ struct OnboardingFlowView: View {
         isAuthenticated: Bool,
         connectionPhase: OnboardingConnectionPhase,
         connectionMethod: MobileConnectionMethod = .automatic,
+        allowsAutomaticConnection: Bool = true,
+        allowsBackNavigationFromConnection: Bool = true,
         keepAwakeOffer: OnboardingKeepAwakeOffer? = nil,
         onSelectConnectionMethod: @escaping (MobileConnectionMethod) -> Void = { _ in },
         onEnablePush: @escaping () async -> Bool,
@@ -48,6 +51,8 @@ struct OnboardingFlowView: View {
         self.isAuthenticated = isAuthenticated
         self.connectionPhase = connectionPhase
         self.connectionMethod = connectionMethod
+        self.allowsAutomaticConnection = allowsAutomaticConnection
+        self.allowsBackNavigationFromConnection = allowsBackNavigationFromConnection
         self.keepAwakeOffer = keepAwakeOffer
         self.onSelectConnectionMethod = onSelectConnectionMethod
         self.onEnablePush = onEnablePush
@@ -102,7 +107,8 @@ struct OnboardingFlowView: View {
             stage: stage,
             isAuthenticated: isAuthenticated,
             connectionPhase: connectionPhase,
-            connectionMethod: connectionMethod
+            connectionMethod: connectionMethod,
+            allowsBackNavigationFromConnection: allowsBackNavigationFromConnection
         )
     }
 
@@ -119,6 +125,7 @@ struct OnboardingFlowView: View {
             OnboardingConnectionView(
                 phase: connectionPhase,
                 connectionMethod: connectionMethod,
+                allowsAutomaticConnection: allowsAutomaticConnection,
                 onSelectConnectionMethod: selectConnectionMethod,
                 keepAwakeOffer: keepAwakeOffer,
                 onSetKeepAwake: setKeepAwake
@@ -135,6 +142,7 @@ struct OnboardingFlowView: View {
         case .push:
             showNotifications()
         case .connect:
+            guard allowsBackNavigationFromConnection else { return }
             showPush()
         }
     }
@@ -148,7 +156,7 @@ struct OnboardingFlowView: View {
         case .push:
             enablePush()
         case .connect:
-            if isAuthenticated {
+            if isAuthenticated || connectionMethod == .tailscale {
                 finishOrRetry()
             } else {
                 finishBeforeAuthentication()

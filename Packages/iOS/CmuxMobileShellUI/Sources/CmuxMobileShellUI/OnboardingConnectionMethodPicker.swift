@@ -9,23 +9,26 @@ import SwiftUI
 struct OnboardingConnectionMethodPicker: View {
     let method: MobileConnectionMethod
     let density: OnboardingConnectionVisualDensity
+    let allowsAutomaticConnection: Bool
     let onSelect: (MobileConnectionMethod) -> Void
 
     var body: some View {
         VStack(spacing: density.pickerOptionSpacing) {
-            optionCard(
-                .automatic,
-                title: L10n.string(
-                    "mobile.onboarding.connect.method.automatic",
-                    defaultValue: "Iroh"
-                ),
-                subtitle: L10n.string(
-                    "mobile.onboarding.connect.method.automaticDetail",
-                    defaultValue: "Requires cmux 0.64.20 or later on your Mac."
-                ),
-                systemImage: "bolt.fill",
-                accessibilityIdentifier: "MobileOnboardingConnectionMethodAutomatic"
-            )
+            if allowsAutomaticConnection {
+                optionCard(
+                    .automatic,
+                    title: L10n.string(
+                        "mobile.onboarding.connect.method.automatic",
+                        defaultValue: "Iroh"
+                    ),
+                    subtitle: L10n.string(
+                        "mobile.onboarding.connect.method.automaticDetail",
+                        defaultValue: "Requires cmux 0.64.20 or later on your Mac."
+                    ),
+                    systemImage: "bolt.fill",
+                    accessibilityIdentifier: "MobileOnboardingConnectionMethodAutomatic"
+                )
+            }
             optionCard(
                 .tailscale,
                 title: L10n.string(

@@ -842,18 +842,13 @@ struct CMUXMobileRootView: View {
         )
     }
 
-    /// Whether first-run onboarding should present: only for a settled,
-    /// signed-in account session, and only while a durable milestone remains
-    /// unfinished. During launch restore, `rootContent` falls through to the
-    /// sign-in screen instead of briefly presenting onboarding for a cached
-    /// identity that may still be rejected.
-    /// Deliberately narrower than the composite `isAuthenticated`: a temporary
-    /// attach-ticket authentication must reach the shell so the attach
-    /// completes, not detour into the tour (whose discovery keep-alive
-    /// requires an account session anyway).
+    /// Whether first-run onboarding or account-free pairing owns the root screen.
+    /// A temporary attach-ticket authentication still reaches the shell, while
+    /// auth restoration settles before a signed-out pairing screen appears.
     private var shouldShowOnboarding: Bool {
         #if os(iOS)
-        return onboardingStore.progress.shouldShowOnboarding(
+        guard !authManager.isRestoringSession else { return false }
+        return !isAuthenticated || onboardingStore.progress.shouldShowOnboarding(
             isAuthenticated: authManager.isAuthenticated,
             isRestoringSession: authManager.isRestoringSession
         )
@@ -905,9 +900,11 @@ struct CMUXMobileRootView: View {
             context: .firstRun,
             isAuthenticated: isAuthenticated,
             connectionPhase: onboardingConnectionPhase,
-            connectionMethod: connectionMethodStore?.method ?? .automatic,
+            connectionMethod: .tailscale,
+            allowsAutomaticConnection: false,
+            allowsBackNavigationFromConnection: !isAccountFreePairingRepair,
             keepAwakeOffer: OnboardingKeepAwakeOfferSource.offer(from: store),
-            onSelectConnectionMethod: { connectionMethodStore?.method = $0 },
+            onSelectConnectionMethod: { _ in selectTailscaleConnectionMethod() },
             onEnablePush: { await pushCoordinator.enable(trigger: "onboarding") },
             onReachedConnection: markOnboardingReadyToConnect,
             onSkip: completeOnboarding,
@@ -950,7 +947,14 @@ struct CMUXMobileRootView: View {
 
     #if os(iOS)
     private var initialOnboardingStage: OnboardingStage {
-        onboardingStore.progress == .connect ? .connect : .agents
+        if isAccountFreePairingRepair {
+            return .connect
+        }
+        return onboardingStore.progress == .connect ? .connect : .agents
+    }
+
+    private var isAccountFreePairingRepair: Bool {
+        onboardingStore.progress == .complete && !isAuthenticated
     }
 
     private var onboardingConnectionPhase: OnboardingConnectionPhase {
@@ -962,7 +966,9 @@ struct CMUXMobileRootView: View {
     }
 
     private func markOnboardingReadyToConnect() {
-        onboardingStore.markReadyToConnect()
+        if onboardingStore.progress != .complete {
+            onboardingStore.markReadyToConnect()
+        }
         guard isAuthenticated, store.connectionState != .connected else { return }
         let stackUserID = authManager.currentUser?.id
         isAwaitingOnboardingReconnectStart = true
@@ -1128,8 +1134,13 @@ struct CMUXMobileRootView: View {
     }
 
     private func showOnboardingPairingScanner() {
+        selectTailscaleConnectionMethod()
         guard currentlyAllowsManualPairing else { return }
         presentPairing(.scanner(entry: .onboardingFallback))
+    }
+
+    private func selectTailscaleConnectionMethod() {
+        connectionMethodStore?.method = .tailscale
     }
 
     /// An external attach ticket can require compatibility approval under any

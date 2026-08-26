@@ -12,9 +12,11 @@ struct OnboardingSceneChrome: Equatable {
         stage: OnboardingStage,
         isAuthenticated: Bool,
         connectionPhase: OnboardingConnectionPhase,
-        connectionMethod: MobileConnectionMethod = .automatic
+        connectionMethod: MobileConnectionMethod = .automatic,
+        allowsBackNavigationFromConnection: Bool = true
     ) {
         showsBack = stage != .agents
+            && (stage != .connect || allowsBackNavigationFromConnection)
         showsSkip = stage != .connect
 
         switch stage {
@@ -40,7 +42,7 @@ struct OnboardingSceneChrome: Equatable {
                 defaultValue: "Not Now"
             )
         case .connect:
-            guard isAuthenticated else {
+            guard isAuthenticated || connectionMethod == .tailscale else {
                 primaryTitle = L10n.string(
                     "mobile.onboarding.continue",
                     defaultValue: "Continue"

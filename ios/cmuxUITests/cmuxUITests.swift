@@ -27,34 +27,36 @@ final class cmuxUITests: XCTestCase {
     }
 
     @MainActor
-    func testStackAuthEntryUsesStableIdentifiers() throws {
+    func testCompletedOnboardingUsesTailscaleOnlyPairingEntry() throws {
         let app = launchApp(
             mockData: false,
             clearAuth: true,
+            environment: ["CMUX_UITEST_SCANNER_PREVIEW": "1"],
             launchArguments: [
                 "-dev.cmux.mobile.onboarding.redesign.progress.v1",
                 "complete",
+                "-dev.cmux.mobile.connectionMethod.v1",
+                "automatic",
             ]
         )
         defer { app.terminate() }
 
-        XCTAssertTrue(app.buttons["signin.apple"].waitForExistence(timeout: 8))
-        XCTAssertTrue(app.buttons["signin.google"].exists)
+        let connectScene = app.descendants(matching: .any)["MobileOnboardingConnectScene"]
+        XCTAssertTrue(connectScene.waitForExistence(timeout: 8))
+        XCTAssertFalse(app.buttons["signin.apple"].exists)
+        XCTAssertFalse(app.buttons["MobileOnboardingConnectionMethodAutomatic"].exists)
 
-        let emailField = app.textFields["Email"]
-        XCTAssertTrue(emailField.exists)
+        let tailscaleMethod = app.buttons["MobileOnboardingConnectionMethodTailscale"]
+        XCTAssertTrue(tailscaleMethod.waitForExistence(timeout: 4))
+        XCTAssertTrue(tailscaleMethod.isSelected)
 
-        let emailCodeButton = app.buttons["signin.emailCode"]
-        XCTAssertTrue(emailCodeButton.exists)
-        XCTAssertFalse(emailCodeButton.isEnabled)
-
-        XCTAssertFalse(
-            app.buttons["signin.usePassword"].exists,
-            "Email-code sign-in must not introduce a password requirement."
+        let scanPairingCode = app.buttons["MobileOnboardingPrimaryButton"]
+        XCTAssertTrue(scanPairingCode.label.contains("Scan Pairing Code"))
+        scanPairingCode.tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["MobilePairingScannerPreview"]
+                .waitForExistence(timeout: 4)
         )
-
-        try typeText("dogfood@example.com", into: emailField, in: app)
-        XCTAssertTrue(emailCodeButton.isEnabled)
     }
 
     /// Exercises the complete first-run activation path without Stack auth,
@@ -573,13 +575,16 @@ final class cmuxUITests: XCTestCase {
     }
 
     @MainActor
-    func testSignedOutOnboardingCompletesBeforeShowingSignIn() throws {
+    func testSignedOutFirstRunContinuesToTailscalePairing() throws {
         let app = launchApp(
             mockData: false,
             clearAuth: true,
+            environment: ["CMUX_UITEST_SCANNER_PREVIEW": "1"],
             launchArguments: [
                 "-dev.cmux.mobile.onboarding.redesign.progress.v1",
                 "welcome",
+                "-dev.cmux.mobile.connectionMethod.v1",
+                "automatic",
             ]
         )
         defer { app.terminate() }
@@ -606,12 +611,18 @@ final class cmuxUITests: XCTestCase {
         XCTAssertTrue(element("MobileOnboardingConnectScene").waitForExistence(timeout: 4))
         XCTAssertFalse(element("MobileOnboardingSignInBridge").exists)
         XCTAssertFalse(app.buttons["signin.apple"].exists)
+        XCTAssertFalse(app.buttons["MobileOnboardingConnectionMethodAutomatic"].exists)
+        XCTAssertTrue(
+            app.buttons["MobileOnboardingConnectionMethodTailscale"]
+                .waitForExistence(timeout: 4)
+        )
         XCTAssertTrue(primaryButton.waitForExistence(timeout: 4))
+        XCTAssertTrue(primaryButton.label.contains("Scan Pairing Code"))
 
         primaryButton.tap()
 
-        XCTAssertTrue(app.buttons["signin.apple"].waitForExistence(timeout: 8))
-        XCTAssertFalse(element("MobileOnboardingConnectScene").exists)
+        XCTAssertTrue(element("MobilePairingScannerPreview").waitForExistence(timeout: 4))
+        XCTAssertFalse(app.buttons["signin.apple"].exists)
     }
 
     /// A migrating BETA install sees the minimum Mac versions once. Choosing

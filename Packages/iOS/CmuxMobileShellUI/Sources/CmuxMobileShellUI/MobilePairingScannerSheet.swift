@@ -41,7 +41,17 @@ struct MobilePairingScannerSheet: View {
         NavigationStack {
             Group {
                 if previewEnabled {
-                    MobilePairingScannerPreview()
+                    if let pairingScannerCode = UITestConfig.pairingScannerCode {
+                        Button {
+                            onCode(pairingScannerCode)
+                        } label: {
+                            MobilePairingScannerPreview()
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("MobilePairingScannerSimulateScan")
+                    } else {
+                        MobilePairingScannerPreview()
+                    }
                 } else {
                     switch authorizationStatus {
                     case .authorized:

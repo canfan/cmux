@@ -20,5 +20,11 @@ public extension UITestConfig {
         UITestEnvironmentConfig(environment: ProcessInfo.processInfo.environment)
             .pairingScannerPreviewEnabled
     }
+
+    /// Pairing code emitted when automation taps the scanner preview.
+    static var pairingScannerCode: String? {
+        UITestEnvironmentConfig(environment: ProcessInfo.processInfo.environment)
+            .pairingScannerCode
+    }
 }
 #endif

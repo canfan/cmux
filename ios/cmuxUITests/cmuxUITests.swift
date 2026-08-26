@@ -59,6 +59,46 @@ final class cmuxUITests: XCTestCase {
         )
     }
 
+    /// A signed-out in-app scan must leave the nested scanner and pairing
+    /// sheets, handing the local capability to the same root flow used by a
+    /// Camera-app deep link. Keeping the parent pairing form mounted strands
+    /// the user behind its loading state even while the attach is in flight.
+    @MainActor
+    func testSignedOutInAppScanHandsOffToRootAttachFlow() throws {
+        let pairingURL = "cmux-ios-dev://attach?v=4&d=test-mac&pc=0&k=test-capability&r=100.64.0.1:58465"
+        let app = launchApp(
+            mockData: false,
+            clearAuth: true,
+            environment: [
+                "CMUX_UITEST_SCANNER_PREVIEW": "1",
+                "CMUX_UITEST_SCANNER_CODE": pairingURL,
+            ],
+            launchArguments: [
+                "-dev.cmux.mobile.onboarding.redesign.progress.v1",
+                "complete",
+                "-dev.cmux.mobile.connectionMethod.v1",
+                "tailscale",
+            ]
+        )
+        defer { app.terminate() }
+
+        let scanPairingCode = app.buttons["MobileOnboardingPrimaryButton"]
+        XCTAssertTrue(scanPairingCode.waitForExistence(timeout: 8))
+        scanPairingCode.tap()
+
+        let pairingView = app.descendants(matching: .any)["MobilePairingView"]
+        XCTAssertTrue(pairingView.waitForExistence(timeout: 4))
+        let simulateScan = app.buttons["MobilePairingScannerSimulateScan"]
+        XCTAssertTrue(simulateScan.waitForExistence(timeout: 4))
+        simulateScan.tap()
+
+        XCTAssertTrue(
+            pairingView.waitForNonExistence(timeout: 4),
+            "The in-app scanner did not hand the local attach URL to the root flow."
+        )
+        XCTAssertFalse(app.buttons["signin.apple"].exists)
+    }
+
     /// Exercises the complete first-run activation path without Stack auth,
     /// a Mac, camera hardware, or network access. The first launch forces the
     /// durable progress key to `welcome`; advancing to Connect writes the real

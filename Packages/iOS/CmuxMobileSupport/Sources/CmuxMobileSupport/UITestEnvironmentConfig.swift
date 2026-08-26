@@ -35,4 +35,13 @@ public struct UITestEnvironmentConfig: Equatable, Sendable {
         return false
         #endif
     }
+
+    /// Pairing code emitted by the deterministic scanner preview on demand.
+    public var pairingScannerCode: String? {
+        #if DEBUG
+        return environment["CMUX_UITEST_SCANNER_CODE"]
+        #else
+        return nil
+        #endif
+    }
 }

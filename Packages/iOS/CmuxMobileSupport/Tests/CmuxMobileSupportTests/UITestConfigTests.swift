@@ -400,5 +400,13 @@ import Testing
             environment: ["CMUX_UITEST_SCANNER_PREVIEW": "0"]
         ).pairingScannerPreviewEnabled == false)
     }
+
+    @Test func pairingScannerCodeCanBeInjected() {
+        let code = "cmux-ios-dev://attach?v=4&d=test-mac&k=test-capability&r=100.64.0.1:58465"
+        #expect(UITestEnvironmentConfig(
+            environment: ["CMUX_UITEST_SCANNER_CODE": code]
+        ).pairingScannerCode == code)
+        #expect(UITestEnvironmentConfig(environment: [:]).pairingScannerCode == nil)
+    }
     #endif
 }

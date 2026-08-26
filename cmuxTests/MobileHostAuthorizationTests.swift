@@ -187,6 +187,39 @@ struct MobileHostAuthorizationTests {
         })
     }
 
+    @Test func testLocalPairingRejectsSecondDevicePresentingOwnedCapability() throws {
+        let suiteName = "MobileLocalPairingStateStoreTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = MobileLocalPairingStateStore(
+            defaults: defaults,
+            keyPrefix: "test.localPairing"
+        )
+
+        #expect(store.preparePairing(capability: "phone-a-capability"))
+        #expect(store.recordAuthorizedConnection(
+            id: UUID(),
+            capability: "phone-a-capability",
+            deviceID: "phone-a",
+            displayName: "First iPhone",
+            activeWorkspaceID: nil,
+            activeSurfaceID: nil
+        ))
+        #expect(!store.recordAuthorizedConnection(
+            id: UUID(),
+            capability: "phone-a-capability",
+            deviceID: "phone-b",
+            displayName: "Second iPhone",
+            activeWorkspaceID: nil,
+            activeSurfaceID: nil
+        ))
+
+        let snapshot = try #require(store.snapshot)
+        #expect(snapshot.deviceID == "phone-a")
+        #expect(snapshot.displayName == "First iPhone")
+        #expect(snapshot.isConnected)
+    }
+
     @Test func testLocalPairingMigratesOnceAndForgetRevokesTheOldPhone() throws {
         let suiteName = "MobileLocalPairingStateStoreTests.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))

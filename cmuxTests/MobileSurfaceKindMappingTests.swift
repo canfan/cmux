@@ -1,4 +1,5 @@
 import CMUXMobileCore
+import Foundation
 import Testing
 
 #if canImport(cmux_DEV)
@@ -37,5 +38,49 @@ import Testing
             #expect(controller.mobileSurfaceKind(for: panelType).rawValue == canonical)
             #expect(Workspace.surfaceKind(for: panelType) == canonical)
         }
+    }
+}
+
+@MainActor
+@Suite(.serialized) struct MobilePanelArtifactTests {
+    @Test func statReadsTheFileDisplayedByALiveMarkdownPanel() async throws {
+        let fileManager = FileManager.default
+        let directoryURL = fileManager.temporaryDirectory
+            .appendingPathComponent("cmux-mobile-markdown-artifact-\(UUID().uuidString)", isDirectory: true)
+        try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        defer { try? fileManager.removeItem(at: directoryURL) }
+
+        let fileURL = directoryURL.appendingPathComponent("README.md")
+        let markdown = "# Mobile preview\n\nLoaded from the Mac.\n"
+        try markdown.write(to: fileURL, atomically: true, encoding: .utf8)
+
+        let manager = TabManager()
+        let workspace = manager.addWorkspace(select: true, eagerLoadTerminal: false)
+        let paneID = try #require(workspace.bonsplitController.allPaneIds.first)
+        let panel = try #require(workspace.newMarkdownSurface(
+            inPane: paneID,
+            filePath: fileURL.path,
+            focus: false
+        ))
+        let controller = TerminalController.shared
+        controller.setActiveTabManager(manager)
+        defer {
+            manager.closeWorkspace(workspace, recordHistory: false)
+            controller.setActiveTabManager(nil)
+        }
+
+        _ = controller.mobileSurfaceDescriptors(in: workspace)
+        let result = await controller.v2MobilePanelArtifactStat(params: [
+            "workspace_id": workspace.id.uuidString,
+            "surface_id": panel.id.uuidString,
+            "path": fileURL.path,
+        ])
+
+        guard case .ok(let rawPayload) = result,
+              let payload = rawPayload as? [String: Any] else {
+            Issue.record("Expected the live Markdown panel artifact stat to succeed, got \(result)")
+            return
+        }
+        #expect((payload["size"] as? NSNumber)?.int64Value == Int64(markdown.utf8.count))
     }
 }

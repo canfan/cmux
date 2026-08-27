@@ -368,13 +368,12 @@ extension TerminalController {
                 data: nil
             ))
         }
-        guard let resolved = mobileResolveWorkspaceAndSurface(
-            params: params,
-            requireTerminal: false
-        ), let resolvedSurfaceID = resolved.surfaceId,
-           resolved.workspace.id == requestedWorkspaceID,
-           resolvedSurfaceID == requestedSurfaceID,
-           let panel = resolved.workspace.panels[resolvedSurfaceID] else {
+        // Artifact descriptors expose workspace-owned panel IDs. Terminal input
+        // resolution cannot resolve non-terminal Markdown and file-preview panels.
+        guard let tabManager = v2ResolveTabManager(params: params),
+              let workspace = v2ResolveWorkspace(params: params, tabManager: tabManager),
+              workspace.id == requestedWorkspaceID,
+              let panel = workspace.panels[requestedSurfaceID] else {
             return (nil, .err(
                 code: "not_found",
                 message: String(
